@@ -29,6 +29,7 @@ ENV/
 env/
 .env
 .conda/
+
 # IDE
 .vscode/
 .idea/
