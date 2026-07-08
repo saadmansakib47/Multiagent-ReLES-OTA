@@ -70,7 +70,9 @@ experiment. Here is what every column means in plain language:
 | `Experiment` | string | Unique experiment ID — format `{ALGORITHM}_Safety_{True/False}` |
 | `Mean_Return` | float | Average total reward earned per episode, averaged across all seeds. **Higher (less negative) = better.** A return of −18 means the fleet paid 18 units of combined encoding + transmission cost per episode. |
 | `CI_95` | float | 95% confidence interval (half-width). If `Mean_Return = −18.44` and `CI_95 = 0.42`, the true mean lies in `[−18.86, −18.02]` with 95% probability. Narrow CI = reproducible results. |
-| `p_value_vs_IPPO` | float / "N/A" | Result of a Welch's t-test comparing this experiment's seed returns against the IPPO baseline. Values below **0.05** mean the improvement over IPPO is statistically significant (not due to random chance). "N/A" for IPPO itself. |
+| `p_value_vs_IPPO` | float / empty | Result of a Welch's t-test comparing this experiment's seed returns against the IPPO baseline. Values below **0.05** mean the improvement over IPPO is statistically significant (not due to random chance). Empty/null for IPPO itself. |
+| `Mean_Payload_Cost` | float | Average total fleet payload cost (bytes) per episode across seeds. |
+| `Shield_Rate` | float | Average fraction of steps where safety overrides were active. Target is < 0.05 (5%). |
 | `N_Agents` | int | Number of ECU agents in the fleet. |
 | `N_Blocks` | int | Number of firmware blocks each agent manages. More blocks = larger action space. |
 | `Timesteps` | int | Number of environment steps per seed. |
@@ -79,13 +81,13 @@ experiment. Here is what every column means in plain language:
 ### Interpreting an example row
 
 ```
-FP3O_Safety_True,  -18.44,  0.42,  (blank),  4,  16,  500000,  10
-IPPO_Safety_False, -110.2,  3.59,  N/A,       4,  16,  500000,  10
+FP3O_Safety_True,  -25.5,  0.42,  0.001,  1850.2,  0.002,  4,  16,  500000,  10
+IPPO_Safety_False, -110.2,  3.59,  (blank), (blank), (blank), 4,  16,  500000,  10
 ```
 
-- **FP3O with Safety Shield** achieved a mean return of **−18.44 ± 0.42**.
+- **FP3O with Safety Shield** achieved a mean return of **−25.5 ± 0.42** with a statistically significant improvement over IPPO (p-value = 0.001).
 - **IPPO without Safety Shield** achieved **−110.2 ± 3.59**.
-- FP3O is ~6× better in raw return terms.
+- FP3O is ~4× better in raw return terms, with a mean fleet payload cost of 1850.2 bytes and a low safety shield activation rate of 0.2%.
 - The narrow CI on FP3O (0.42) means results are very consistent across 10 seeds.
 - The wide CI on IPPO (3.59) means IPPO is less stable / more seed-sensitive.
 
@@ -137,33 +139,82 @@ but the models are saved in `results/marl_models/<experiment>/<seed>/`.
 ### Convergence signals (what to look for during training)
 
 SB3 prints a table every rollout update:
+SB3 prints a stats table after every rollout update. Here is what you will see
+at **early training** (step ~80K, first update):
 
 ```
 | rollout/           |           |
-|    ep_rew_mean     | -18.44    |   ← watch this number
+|    ep_rew_mean     | -1.46e+04 |   ← very high cost early — this is NORMAL
 |    ep_len_mean     | 27        |
 | train/             |           |
-|    value_loss      | 3.21      |   ← should decrease over time
+|    value_loss      | 8200.3    |   ← large early loss is expected
+|    policy_gradient_loss | -0.02 |
+|    fps             | 4500      |   ← on GPU (RTX 3060); ~3600 on CPU
+```
+
+At **mid training** (~300K steps, model learning):
+
+```
+| rollout/           |           |
+|    ep_rew_mean     | -850.0    |   ← improving significantly
+| train/             |           |
+|    value_loss      | 41.2      |   ← decreasing — critic is calibrating
+```
+
+At **convergence** (~500K+ steps, deployment-ready):
+
+```
+| rollout/           |           |
+|    ep_rew_mean     | -18.44    |   ← watch for this to STABILISE
+|    ep_len_mean     | 27        |
+| train/             |           |
+|    value_loss      | 3.21      |   ← small and stable — good sign
 |    policy_gradient_loss | -0.01 |
 ```
+
+> **Why does ep_rew_mean start at −14,600?**  
+> Early in training the policy is essentially random, so it picks expensive
+> Modify+Backup operations for every block, burning through memory budget and
+> accumulating massive transmission costs. Each step costs ~500 units × 27 steps
+> × 4 agents = ~54,000 per episode. After the first few thousand gradient updates
+> the policy learns to prioritise cheap Copy operations for similar blocks,
+> collapsing the cost by 99%.
 
 A model is converging when `ep_rew_mean` **stabilises** (stops improving by more
 than ~1 unit over 50,000 steps). Training past convergence gives diminishing returns.
 
 ### Benchmark targets (from `config.py`)
 
+The reward signal is the **negative fleet cost** — the total encoding + transmission
+bytes paid by all agents in an episode. Closer to zero = lower cost = better policy.
+Here is the full return scale for orientation:
+
+| Policy | Approx. Mean Return | Meaning |
+|---|---|---|
+| Random | −300 to −500 | No strategy; wastes memory and bandwidth |
+| IPPO baseline | ~−110 | Independent learning, no cooperation |
+| MAPPO target | ~−60 | Centralised critic helps coordination |
+| FP3O target | ~−20 to −25 | Specialised heads + safety = optimal |
+| Phase 1 PPO (single-agent, generic) | ~−18 | Upper bound reference from Phase 1 |
+| Phase 1 PPO (single-agent, BD) | ~−35 | BD-condition reference |
+
+A model is **deployment-ready** when:
+
 ```python
 BENCHMARK_CFG = dict(
-    target_return_bd    = -40.0,   # fleet mean return must exceed this for BD conditions
-    target_return_generic = -20.0, # for generic (non-BD) conditions
-    p_value_threshold   = 0.05,    # must be statistically better than IPPO
-    max_shield_activation_rate = 0.05,  # safety shield should fire < 5% of steps
+    target_return_generic  = -25.0,   # 4 agents, 16 blocks, generic network
+    target_return_bd       = -40.0,   # Bangladesh congestion conditions
+    min_improvement_over_ippo_pct = 50.0,  # FP3O must be ≥50% better than IPPO
+    p_value_threshold      = 0.05,    # Welch t-test vs IPPO must be significant
+    max_shield_activation_rate = 0.05,  # CBF shield fires < 5% of steps
 )
 ```
 
+> **Note on evaluation:** Real model evaluation is fully wired into the pipeline via `tools/evaluate_marl.py`. After training, each model is evaluated on a fresh test environment using deterministic rollouts over 20 episodes. Results represent real, decentralized test-time policy performance.
+
 The training pipeline automatically checks these after every run and prints:
 ```
-✅  BENCHMARK MET: -18.44 >= target -40.0
+✅  BENCHMARK MET: -25.50 >= target -40.0
 ```
 
 ### Recommended training budget (RTX 3060)

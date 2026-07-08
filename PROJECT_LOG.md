@@ -2,6 +2,19 @@
 
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
+## 2026-07-08 — Real MARL Evaluation & Pipeline Refactoring
+
+### Completed Work
+- **Evaluation Module (`tools/evaluate_marl.py`):** Replaced `_placeholder_eval` with a real evaluation module that loads saved PPO checkpoints and performs decentralized-execution deterministic rollouts on a fresh test environment over 20 episodes.
+- **Training Return Integration (`train_mappo.py`):** Modified `train_algorithm` to return the actual final training-time rolling `ep_rew_mean` from SB3's VecMonitor `ep_info_buffer` instead of `None`.
+- **Pipeline Integration (`main.py`):** Wired the real evaluation results into the training pipeline. Added `Mean_Payload_Cost` and `Shield_Rate` columns to the leaderboard CSV. Implemented a fully functional test-only mode (`--mode test`) to load and evaluate already trained models.
+- **Extenders Compatibility (`fp3o_policy.py`):** Added `forward_actor` and `forward_critic` methods to the policy's `_IdentityExtractor` class to maintain compatibility with SB3's internal `predict` call.
+- **Leaderboard Fixes:** Prevented Pandas `FutureWarning` by storing missing/N/A columns (like `p_value_vs_IPPO`) as empty/float `None` instead of mixed types. Updated columns configuration and explanations in `interpretation.md`.
+
+### Verification
+- Tested training mode: `python main.py --seeds 1 --timesteps 100 --algorithm fp3o --safety True --eval_episodes 3` runs successfully, saves models, evaluates real seed returns, and logs to the registry and leaderboard.
+- Tested evaluation-only mode: `python main.py --mode test --algorithm fp3o --safety True --eval_episodes 2` runs successfully across all 10 saved seeds and outputs final statistics.
+
 ## 2026-07-08 — Developer Q&A, GPU Fix, Config Centralisation & Chart Tooling
 
 ### Completed Work
@@ -19,6 +32,8 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 - `python tools/training_registry.py` — Lists all recorded runs with full metadata.
 - `python tests/edge_case.py` — Uses config values for monsoon parameters.
 - All three test files pass without hardcoded domain constants.
+- `python -c "import torch; print(torch.cuda.is_available())"` → `True`; `get_device_name(0)` → `NVIDIA GeForce RTX 3060`.
+- `python train_mappo.py --mode train --algorithm fp3o --timesteps 10000` — Logs `Using cuda device`, achieves **4,500 fps** (vs ~3,600 fps on CPU). Model saved to `results/marl_models/fp3o_generic_final`.
 
 ### Notes
 - The CUDA-enabled torch wheel is ~2.5 GB. This is a one-time download.

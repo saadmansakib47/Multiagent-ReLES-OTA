@@ -1,0 +1,33 @@
+[
+  {
+    "run_id": 1,
+    "timestamp": "2026-07-08T13:10:01.056603+00:00",
+    "algorithm": "FP3O",
+    "safety": true,
+    "n_seeds": 1,
+    "timesteps_per_seed": 100,
+    "total_env_steps": 100,
+    "mean_return": -25.7994,
+    "ci_95": 0.0,
+    "p_value_vs_ippo": "N/A",
+    "n_agents": 4,
+    "n_blocks": 16
+  },
+  {
+    "run_id": 2,
+    "timestamp": "2026-07-08T13:31:24.864977+00:00",
+    "algorithm": "FP3O",
+    "safety": true,
+    "n_seeds": 1,
+    "timesteps_per_seed": 100,
+    "total_env_steps": 100,
+    "mean_return": -9039.4923,
+    "ci_95": 0.0,
+    "p_value_vs_ippo": "N/A",
+    "n_agents": 4,
+    "n_blocks": 16,
+    "mean_payload_cost": 2619.3,
+    "shield_rate": 0.0,
+    "eval_episodes": 3
+  }
+]

@@ -456,6 +456,10 @@ class FP3OPolicy(ActorCriticPolicy):
                 self.latent_dim_vf = dim
             def forward(self, features):
                 return features, features  # (pi_features, vf_features)
+            def forward_actor(self, features):
+                return features
+            def forward_critic(self, features):
+                return features
 
         self.mlp_extractor = _IdentityExtractor(latent_dim)
 

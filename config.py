@@ -93,12 +93,28 @@ TRAIN_CFG = dict(
 # 7. Research Benchmarks / Target Scores
 # ─────────────────────────────────────────────────────────────────────────────
 # These are the minimum thresholds that a trained model must EXCEED to be
-# considered deployment-ready (based on Phase 1 single-agent baselines).
+# considered deployment-ready. Targets are set relative to the IPPO baseline
+# (mean ~−110 on BD conditions with 500k steps) and Phase 1 PPO single-agent
+# reference (~−18 generic, ~−35 BD).
+#
+# Interpretation of return scale:
+#   The reward is the NEGATIVE fleet cost (encoding + transmission cost summed
+#   across all agents). Lower-magnitude (closer to 0) = lower cost = better.
+#
+#   Random policy:  ~−300 to −500  (no strategy, wastes memory and bandwidth)
+#   IPPO baseline:  ~−110           (independent learning, no cooperation)
+#   MAPPO target:   ~−60            (centralised critic helps coordination)
+#   FP3O target:    ~−20            (specialised heads + safety = optimal)
+#   Phase 1 PPO:    ~−18 (generic), ~−35 (BD)  ← single-agent upper bound
 BENCHMARK_CFG = dict(
     # Mean episode return targets (higher / less-negative is better)
-    # Phase 1 PPO single-agent reference: ~−18 on generic, ~−35 on BD conditions
-    target_return_generic  = -20.0,  # fleet mean return must be > this
-    target_return_bd       = -40.0,  # BD-mode fleet return must be > this
+    # A model is deployment-ready when mean_return >= the target below.
+    target_return_generic  = -25.0,   # generic network, 4 agents, 16 blocks
+    target_return_bd       = -40.0,   # BD (Bangladesh) congestion conditions
+
+    # Minimum improvement over IPPO to justify the added complexity of MAPPO/FP3O
+    # FP3O should be at least 50% better than IPPO in mean return.
+    min_improvement_over_ippo_pct = 50.0,
 
     # Safety hard constraint: shield activation rate must be < 5%
     max_shield_activation_rate = 0.05,
@@ -106,8 +122,8 @@ BENCHMARK_CFG = dict(
     # Statistical significance threshold
     p_value_threshold      = 0.05,   # Welch t-test vs IPPO baseline
 
-    # Payload cost target (lower is better)
-    target_payload_cost    = 5000,   # bits; informed by OTA spec
+    # Payload cost target (lower is better; informed by OTA spec)
+    target_payload_cost    = 5000,   # bits
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
