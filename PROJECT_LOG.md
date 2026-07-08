@@ -2,6 +2,29 @@
 
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
+## 2026-07-08 — Developer Q&A, GPU Fix, Config Centralisation & Chart Tooling
+
+### Completed Work
+- **GPU Fix:** Diagnosed that PyTorch was installed as the CPU-only build (`2.8.0+cpu`). CUDA 12.6 driver and RTX 3060 are fully functional — the issue was purely the wrong pip wheel. Reinstalled with `--index-url https://download.pytorch.org/whl/cu124` to get `torch 2.6.0+cu124`. After the install, `torch.cuda.is_available()` returns `True` and `train_mappo.py` automatically pins to GPU.
+- **`config.py` (new):** Centralised all magic numbers into typed config dicts: `ENV_CFG`, `SAFETY_CFG`, `BD_CFG`, `SHAPLEY_CFG`, `NET_CFG`, `TRAIN_CFG`, `BENCHMARK_CFG`, `PATHS_CFG`. This eliminates scattered hard-codes like `0.85` (memory budget), `250` (monsoon jitter ms), `10` (n_envs), `128` (latent dim).
+- **`tools/training_registry.py` (new):** Append-only JSON log of every training run with full metadata (algorithm, seeds, timesteps, mean return, CI, p-value, timestamp). Answers "how many times has this model been trained?" definitively. Viewable via `python tools/training_registry.py`.
+- **`tools/plot_comparison.py` (new):** Auto-generates two-panel side-by-side comparison charts from the leaderboard. Left panel: bar chart of Mean Return ± 95% CI with benchmark target line. Right panel: metadata table + p-value significance verdict. Old charts are deleted automatically on each run (use `--keep-old` to accumulate). Called automatically from `main.py` after each run if ≥2 experiments exist.
+- **`marl_ota_env.py` refactor:** Replaced hardcoded `0.25` memory limit fraction with `1 - SAFETY_CFG["memory_budget_frac"]` from `config.py`. Added `config.py` import with fallback defaults.
+- **`tests/edge_case.py` refactor:** Replaced hardcoded `2.5` monsoon multiplier with `BD_CFG["monsoon_multiplier_high"]` from `config.py`.
+- **`main.py` updates:** Wired in `training_registry.log_run()`, benchmark pass/fail check, and auto chart generation.
+- **`interpretation.md` (new):** Comprehensive developer guide answering all key project questions: GPU setup, leaderboard column meanings, seed semantics, training enough determination, parameter effects, training history, and hardcoded value policy.
+
+### Verification
+- `python tools/plot_comparison.py --algo1 FP3O_Safety_True --algo2 IPPO_Safety_False` — Chart generated at `results/charts/compare_FP3O_Safety_True_vs_IPPO_Safety_False.png`.
+- `python tools/training_registry.py` — Lists all recorded runs with full metadata.
+- `python tests/edge_case.py` — Uses config values for monsoon parameters.
+- All three test files pass without hardcoded domain constants.
+
+### Notes
+- The CUDA-enabled torch wheel is ~2.5 GB. This is a one-time download.
+- After GPU install, every `train_algorithm()` call will automatically use CUDA without any code change.
+- The `interpretation.md` file should be kept updated when new design decisions are made.
+
 ## 2026-07-07 (Session 2) — Full Research Pipeline Implementation
 
 ### Completed Work

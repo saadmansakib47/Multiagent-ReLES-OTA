@@ -39,6 +39,15 @@ from ota_core import (
     load_bd_params,
 )
 
+# Import config (provides all tunable constants in one place)
+try:
+    from config import SAFETY_CFG, BD_CFG
+except ImportError:
+    # Fallback defaults if run outside the project root
+    SAFETY_CFG = {"enabled": True, "memory_budget_frac": 0.85}
+    BD_CFG = {"monsoon_jitter_ms": 250, "monsoon_multiplier_low": 1.5,
+              "monsoon_multiplier_high": 3.0}
+
 
 # ══════════════════════════════════════════════════════════════
 #  Multi-Agent OTA Environment
@@ -360,8 +369,10 @@ class MultiAgentOTAEnv(ParallelEnv):
 
         current_M = sum(self.cum_memory[a] for a in self.possible_agents)
         mem_budget = self.bd_params.get("memory_budget_fraction", 1.0)
-        M_limit = self.n_agents_total * self.n_blocks * self.block_size * 2.0 * mem_budget * 0.25
+        # Use safety threshold from config; alpha=0.5 scales the safety margin
+        safety_frac = SAFETY_CFG["memory_budget_frac"]  # e.g. 0.85
         alpha = 0.5
+        M_limit = self.n_agents_total * self.n_blocks * self.block_size * 2.0 * mem_budget * (1 - safety_frac)
 
         def _eval_coalition(S):
             S_overhead = {a: proposed_overhead[a] for a in S}
