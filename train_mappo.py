@@ -242,7 +242,18 @@ def train_algorithm(
     tag = "bd" if bd_mode else "generic"
     model.save(f"{save_dir}/{algorithm}_{tag}_final")
     print(f"\n  Training done in {elapsed:.1f}s  →  saved to {save_dir}/{algorithm}_{tag}_final")
+
+    # ── Extract final training-time ep_rew_mean from VecMonitor buffer ──────
+    # ep_info_buffer is a deque populated by VecMonitor with dicts {r, l, t}.
+    # This gives the rolling mean episode return over the last N episodes
+    # seen during training — useful as a sanity check scalar.
+    train_mean_return = None
+    if hasattr(model, "ep_info_buffer") and len(model.ep_info_buffer) > 0:
+        train_mean_return = float(np.mean([ep["r"] for ep in model.ep_info_buffer]))
+        print(f"  Training-time ep_rew_mean (last {len(model.ep_info_buffer)} eps): {train_mean_return:.2f}")
+
     env.close()
+    return train_mean_return
 
 
 # ══════════════════════════════════════════════════════════════
