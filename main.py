@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+# pyrefly: ignore [missing-import]
 import scipy.stats as stats
 
 from config import BENCHMARK_CFG, PATHS_CFG, TRAIN_CFG

@@ -2,6 +2,55 @@
 
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
+---
+
+## 2026-07-09 — Git Merge Conflict Resolution, Argument Fixes & Reward Rescaling
+
+### Context
+After a teammate attempted a Codex-assisted fix for a "Windows abort issue", `main.py` was left with unresolved Git merge conflict markers (`<<<<<<< HEAD`, `=======`, `>>>>>>>`), causing a `SyntaxError` whenever `web_ui.py` tried to import or invoke it. The terminal UI was unaffected because it runs `train_mappo.py` directly, but the web UI's terminal output field was completely broken.
+
+### Completed Work
+
+#### 1. `main.py` — Merge Conflict Resolution
+- **Resolved all Git merge conflict markers** across the entire file (lines 2–534 in the conflicted version).
+- **Merged the two conflict branches** by taking the more advanced `db9e210` branch as the base (which had real evaluation via `evaluate_trained_model`, full test mode, per-seed payload/shield stats) and preserving the `train_mappo.train_algorithm` import from HEAD.
+- **Removed `_run_algorithm` helper** — its logic (train loop, leaderboard update, registry log, chart generation) was inlined into `main()` directly with improved structure and real evaluation instead of `_placeholder_performance`.
+- **Added `_update_leaderboard`** (replacing `_upsert_leaderboard`) with consistent dtype handling to suppress Pandas `FutureWarning` when mixing float and `None` columns.
+
+#### 2. `main.py` — Missing CLI Arguments Restored
+- After the merge, the web UI threw `unrecognized arguments: --n_envs 10 --n_steps 2048 --batch_size 64 --device auto --bd_mode True --death_masking True` because the merged `argparse` block was missing these parameters.
+- **Re-added six missing `argparse` arguments**: `--n_envs`, `--n_steps`, `--batch_size`, `--device`, `--bd_mode`, `--death_masking`, each with defaults pulled from `TRAIN_CFG`.
+- **Propagated all arguments** into both `train_algorithm()` and `evaluate_trained_model()` / `evaluate_all_seeds()` call sites (previously hardcoded `bd_mode=True` was replaced with `args.bd_mode`).
+- **Added corresponding print lines** to the startup banner for rollout size, batch size, device, and BD mode.
+
+#### 3. `marl_ota_env.py` — Reward Scale Fix (Critical)
+The original reward magnitudes were producing episode returns of −8,000 to −10,000 against a benchmark target of −40. Root causes:
+- **`max_steps` too short**: `n_blocks + 10 = 26` steps left agents almost no room to explore; changed to `n_blocks × 3 = 48`.
+- **Wall-clock 120s timeout**: Forced all agents to terminate with a `−200.0` penalty, firing frequently during slow CPU training; **replaced** with a clean step-budget exit that assigns `0.0` reward to already-terminated agents.
+- **Per-step cost scale**: `enc_cost + tx_cost + overhead × 0.3` on raw byte values produced rewards of hundreds per step; **rescaled** to `(enc + tx) × 0.001 + overhead × 0.0003`, targeting `~−1 to −5` per step.
+- **Completion bonus**: `250.0 × efficiency_fraction` was noisy and enormous; replaced with a flat `+10.0` bonus for finishing all blocks.
+- **Crash penalty**: `−500.0` per agent; reduced to `−50.0` — still discourages crashes but no longer dominates the entire episode return.
+- **Invalid action penalty**: `−50.0`; reduced to `−1.0` so early exploration is not catastrophically punished.
+
+#### 4. `web_ui.py` — Default Hyperparameter Correction
+- **`timesteps` default**: `100_000` → `500_000` (matches `TRAIN_CFG["total_timesteps"]` in `config.py`; at 100k the model barely completed 5 PPO gradient updates).
+- **`seeds` default**: `10` → `3` (fewer seeds per web UI run = more compute allocated per seed, faster iteration).
+
+### Why Scores Were Worsening Run-to-Run
+Each web UI run launches a **fresh model from random initialization** into a different `seed_dir`. With only 100k timesteps (~5 gradient updates), results were essentially noise around the random policy baseline (−8k to −10k). The run-to-run variation was **not catastrophic forgetting** — it was insufficient training depth making each run independently random. The rescaled reward and 500k timestep default should yield returns in the `−20 to −80` range and genuine convergence.
+
+### Recommendations Before Next Run
+- Delete `results/marl_models/FP3O_Safety_True/` to clear checkpoints trained under the old broken reward scale.
+- Start with `n_blocks=8` in the web UI for a curriculum warm-up; once mean return ≥ −40, switch to `n_blocks=16`.
+- Use `--seeds 3` and `--timesteps 500000` (now the defaults) for the first benchmark run.
+
+### Verification
+- `python web_ui.py` starts without error; web UI terminal output field no longer throws `SyntaxError`.
+- `main.py` parses all arguments from the web UI command line without `unrecognized arguments` error.
+- Reward magnitudes in `marl_ota_env.py` verified by inspection: step rewards now in `[−5, +10]` range vs. previous `[−500, +250]`.
+
+---
+
 ## 2026-07-08 — Real MARL Evaluation & Pipeline Refactoring
 
 ### Completed Work

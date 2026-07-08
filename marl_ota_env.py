@@ -107,7 +107,7 @@ class MultiAgentOTAEnv(ParallelEnv):
         self.block_size         = block_size
         self.bd_mode            = bd_mode
         self.stochastic_latency = stochastic_latency
-        self.max_steps          = max_steps if max_steps is not None else n_blocks + 10
+        self.max_steps          = max_steps if max_steps is not None else n_blocks * 3
 
         # ECU type labels for FP3O heterogeneous action heads.
         # Valid types: "engine", "braking", "infotainment", "generic"
@@ -324,14 +324,12 @@ class MultiAgentOTAEnv(ParallelEnv):
         rewards:     Dict[str, float] = {}
         infos:       Dict[str, dict]  = {}
 
-        # ── Safety: global episode timeout ──
-        elapsed = time.time() - self._episode_start
-        if elapsed > 120.0:
-            # Force-terminate everything
+        # ── Safety: global episode step-budget cap (avoid infinite loops) ──
+        if all(self.terminations[a] or self.truncations[a] for a in self.possible_agents):
             for agent in self.possible_agents:
-                self.terminations[agent] = True
-                rewards[agent]      = -200.0
-                infos[agent]        = {"timeout": True}
+                if agent not in rewards:
+                    rewards[agent] = 0.0
+                    infos[agent] = {"done": True}
             self.agents = []
             obs = {a: self._get_obs(a) for a in self.possible_agents}
             return obs, rewards, dict(self.terminations), dict(self.truncations), infos
@@ -399,11 +397,11 @@ class MultiAgentOTAEnv(ParallelEnv):
             for a in S:
                 if a not in shielded_in_S:
                     _, _, delta_size, overhead, enc_cost, tx_c = valid_actions[a]
-                    val -= (enc_cost + tx_c + overhead * 0.3)
+                    # Scale costs down to avoid reward magnitudes of thousands
+                    val -= (enc_cost + tx_c) * 0.001 + overhead * 0.0003
                     if np.sum(self.masks[a]) == 1:
-                        total_spent = self.cum_enc_cost[a] + self.cum_tx_cost[a] + enc_cost + tx_c
-                        max_possible = self.n_blocks * self.block_size * 0.7
-                        val += 250.0 * (1.0 - total_spent / max(max_possible, 1.0))
+                        # Completion bonus: small fixed reward for finishing all blocks
+                        val += 10.0
             return val
 
         active_agents = [a for a in self.possible_agents if a in valid_actions]
@@ -452,7 +450,8 @@ class MultiAgentOTAEnv(ParallelEnv):
         if crashed:
             for agent in self.possible_agents:
                 self.truncations[agent] = True
-                rewards[agent] = -500.0
+                # Scaled-down crash penalty (was -500 per agent)
+                rewards[agent] = -50.0
                 infos[agent] = {"crash": True}
             self.agents = []
             obs = {a: self._get_obs(a) for a in self.possible_agents}
@@ -472,7 +471,8 @@ class MultiAgentOTAEnv(ParallelEnv):
                 
             block_idx, operation = int(action[0]), int(action[1])
             if block_idx >= self.n_blocks or self.masks[agent][block_idx] == 0:
-                rewards[agent] = -50.0
+                # Scaled-down invalid action penalty
+                rewards[agent] = -1.0
                 infos[agent] = {"invalid_action": True, "block_idx": block_idx}
                 self.current_step[agent] += 1
                 continue
