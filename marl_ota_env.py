@@ -22,8 +22,11 @@ References
 """
 
 import numpy as np
+# pyrefly: ignore [missing-import]
 from gymnasium import spaces
+# pyrefly: ignore [missing-import]
 from pettingzoo import ParallelEnv
+# pyrefly: ignore [missing-import]
 from pettingzoo.utils import parallel_to_aec
 
 import hashlib
