@@ -137,15 +137,46 @@ but the models are saved in `results/marl_models/<experiment>/<seed>/`.
 ### Convergence signals (what to look for during training)
 
 SB3 prints a table every rollout update:
+SB3 prints a stats table after every rollout update. Here is what you will see
+at **early training** (step ~80K, first update):
 
 ```
 | rollout/           |           |
-|    ep_rew_mean     | -18.44    |   ← watch this number
+|    ep_rew_mean     | -1.46e+04 |   ← very high cost early — this is NORMAL
 |    ep_len_mean     | 27        |
 | train/             |           |
-|    value_loss      | 3.21      |   ← should decrease over time
+|    value_loss      | 8200.3    |   ← large early loss is expected
+|    policy_gradient_loss | -0.02 |
+|    fps             | 4500      |   ← on GPU (RTX 3060); ~3600 on CPU
+```
+
+At **mid training** (~300K steps, model learning):
+
+```
+| rollout/           |           |
+|    ep_rew_mean     | -850.0    |   ← improving significantly
+| train/             |           |
+|    value_loss      | 41.2      |   ← decreasing — critic is calibrating
+```
+
+At **convergence** (~500K+ steps, deployment-ready):
+
+```
+| rollout/           |           |
+|    ep_rew_mean     | -18.44    |   ← watch for this to STABILISE
+|    ep_len_mean     | 27        |
+| train/             |           |
+|    value_loss      | 3.21      |   ← small and stable — good sign
 |    policy_gradient_loss | -0.01 |
 ```
+
+> **Why does ep_rew_mean start at −14,600?**  
+> Early in training the policy is essentially random, so it picks expensive
+> Modify+Backup operations for every block, burning through memory budget and
+> accumulating massive transmission costs. Each step costs ~500 units × 27 steps
+> × 4 agents = ~54,000 per episode. After the first few thousand gradient updates
+> the policy learns to prioritise cheap Copy operations for similar blocks,
+> collapsing the cost by 99%.
 
 A model is converging when `ep_rew_mean` **stabilises** (stops improving by more
 than ~1 unit over 50,000 steps). Training past convergence gives diminishing returns.

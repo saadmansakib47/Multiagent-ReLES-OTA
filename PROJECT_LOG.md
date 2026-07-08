@@ -19,6 +19,8 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 - `python tools/training_registry.py` — Lists all recorded runs with full metadata.
 - `python tests/edge_case.py` — Uses config values for monsoon parameters.
 - All three test files pass without hardcoded domain constants.
+- `python -c "import torch; print(torch.cuda.is_available())"` → `True`; `get_device_name(0)` → `NVIDIA GeForce RTX 3060`.
+- `python train_mappo.py --mode train --algorithm fp3o --timesteps 10000` — Logs `Using cuda device`, achieves **4,500 fps** (vs ~3,600 fps on CPU). Model saved to `results/marl_models/fp3o_generic_final`.
 
 ### Notes
 - The CUDA-enabled torch wheel is ~2.5 GB. This is a one-time download.
