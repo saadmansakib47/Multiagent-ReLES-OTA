@@ -67,11 +67,12 @@ TRAIN_CFG = dict(
     # PPO on-policy
     learning_rate  = 3e-4,
     n_steps        = 2048,   # rollout horizon per env
-    batch_size     = 64,
+    batch_size     = 512,    # must divide n_steps*n_envs (20480); was 64 — too noisy
+    n_epochs       = 10,     # PPO gradient passes per rollout
     gae_lambda     = 0.95,
     gamma          = 0.99,
     clip_range     = 0.2,
-    ent_coef       = 0.01,
+    ent_coef       = 0.02,   # slightly higher entropy to encourage exploration early
     vf_coef        = 0.5,
     max_grad_norm  = 0.5,
 

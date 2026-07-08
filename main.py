@@ -90,6 +90,8 @@ def main():
     parser.add_argument("--n_envs", type=int, default=TRAIN_CFG["n_envs"], help="Parallel rollout environments")
     parser.add_argument("--n_steps", type=int, default=TRAIN_CFG["n_steps"], help="PPO rollout horizon per environment")
     parser.add_argument("--batch_size", type=int, default=TRAIN_CFG["batch_size"], help="PPO minibatch size")
+    parser.add_argument("--n_epochs", type=int, default=TRAIN_CFG["n_epochs"], help="PPO gradient epochs per rollout")
+    parser.add_argument("--ent_coef", type=float, default=TRAIN_CFG["ent_coef"], help="PPO entropy coefficient")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto", help="Training device")
     parser.add_argument("--bd_mode", type=lambda x: str(x).lower() == "true", default=True, help="Enable constrained BD network")
     parser.add_argument("--death_masking", type=lambda x: str(x).lower() == "true", default=True, help="Enable death masking")
@@ -150,8 +152,11 @@ def main():
                 n_envs          = args.n_envs,
                 n_steps         = args.n_steps,
                 batch_size      = args.batch_size,
+                n_epochs        = args.n_epochs,
+                ent_coef        = args.ent_coef,
                 device          = args.device,
                 death_masking   = args.death_masking,
+                seed            = seed,
             )
             elapsed = time.time() - t0
             print(f"[Seed {seed + 1}/{args.seeds}] Training completed in {elapsed:.1f}s")

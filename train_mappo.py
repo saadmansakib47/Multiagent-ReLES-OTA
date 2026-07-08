@@ -131,9 +131,12 @@ def train_algorithm(
     save_dir: str       = "results/marl_models",
     n_envs: int          = 10,
     n_steps: int         = 2048,
-    batch_size: int      = 64,
+    batch_size: int      = 512,
+    n_epochs: int        = 10,
+    ent_coef: float      = 0.02,
     device: str          = "auto",
     death_masking: bool  = True,
+    seed: int            = 42,
 ) -> None:
     """
     Train Independent PPO (IPPO) on the multi-agent OTA env.
@@ -233,16 +236,18 @@ def train_algorithm(
         learning_rate   = 3e-4,
         n_steps         = n_steps,
         batch_size      = batch_size,
+        n_epochs        = n_epochs,
         gae_lambda      = 0.95,
         gamma           = 0.99,
         clip_range      = 0.2,
-        ent_coef        = 0.01,
+        ent_coef        = ent_coef,
         vf_coef         = 0.5,
         max_grad_norm   = 0.5,
+        seed            = seed,
     )
-    # Seed RNGs without triggering env.seed() propagation (SB3 >=2.x)
-    np.random.seed(42)
-    torch.manual_seed(42)
+    # Seed RNGs with the per-seed value so each seed genuinely differs
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     print(f"\n  Starting {algorithm.upper()} training on {selected_device}...")
     t0 = time.time()
