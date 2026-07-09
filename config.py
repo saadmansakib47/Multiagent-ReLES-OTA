@@ -66,8 +66,8 @@ NET_CFG = dict(
 TRAIN_CFG = dict(
     # PPO on-policy
     learning_rate  = 3e-4,
-    n_steps        = 2048,   # rollout horizon per env
-    batch_size     = 512,    # must divide n_steps*n_envs (20480); was 64 — too noisy
+    n_steps        = 256,    # rollout horizon per env (was 2048) — smaller horizon means more updates
+    batch_size     = 128,    # must divide n_steps*n_envs*n_agents (4096); was 512
     n_epochs       = 10,     # PPO gradient passes per rollout
     gae_lambda     = 0.95,
     gamma          = 0.99,
@@ -77,10 +77,10 @@ TRAIN_CFG = dict(
     max_grad_norm  = 0.5,
 
     # Parallel collection
-    n_envs         = 10,     # matches Ryzen 5 5600 12-thread budget
+    n_envs         = 4,      # was 10
 
     # Experiment scale
-    total_timesteps= 1_000_000,  # per seed; 500k not enough for FP3O to discover optimal ops
+    total_timesteps= 500_000,  # per seed; now provides 488 updates (was only 12 at 1M steps!)
     n_seeds        = 10,
 
     # Convergence / budget stop

@@ -472,9 +472,9 @@ class MultiAgentOTAEnv(ParallelEnv):
             block_idx, operation = int(action[0]), int(action[1])
 
             # Per-agent step-budget truncation: if an agent has exhausted its
-            # step budget without finishing, truncate it with a small penalty.
+            # step budget without finishing, truncate it with a penalty.
             if self.current_step[agent] >= self.max_steps:
-                rewards[agent] = -2.0
+                rewards[agent] = -15.0
                 infos[agent] = {"step_limit": True}
                 self.truncations[agent] = True
                 self.current_step[agent] += 1
@@ -482,8 +482,8 @@ class MultiAgentOTAEnv(ParallelEnv):
 
             if block_idx >= self.n_blocks or self.masks[agent][block_idx] == 0:
                 # Invalid action penalty — must be clearly worse than taking
-                # any valid action (cheapest valid step ~-0.66), so use -2.0
-                rewards[agent] = -2.0
+                # any valid action (cheapest valid step ~-0.66, most expensive ~-6.54), so use -15.0
+                rewards[agent] = -15.0
                 infos[agent] = {"invalid_action": True, "block_idx": block_idx}
                 self.current_step[agent] += 1
                 continue

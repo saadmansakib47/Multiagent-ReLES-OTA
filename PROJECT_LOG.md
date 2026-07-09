@@ -4,6 +4,32 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 
 ---
 
+## 2026-07-09 (Session 5) — PPO Update Frequency Bottleneck Fix & Invalid Action Penalty Tuning
+
+### Context
+Despite running for `1,000,000` timesteps, the model's return remained at `−183.36` (nearly random behavior). Further analysis of SB3 logs revealed a major bottleneck: because `n_envs = 10`, `n_steps = 2048`, and there are `4` agents, each rollout collection gathers `10 × 2048 × 4 = 81,920` agent transitions. In a `500,000` step run, this results in only **6 PPO update iterations** (and only **12 updates** in a `1,000,000` step run). PPO cannot learn a multi-agent policy in just 12 updates. The previous developers did not notice this because they were misled by a placeholder evaluator that returned fake pre-set scores (`−20` for FP3O).
+
+### Completed Work
+
+#### 1. Increased PPO Update Frequency (`config.py`, `train_mappo.py`, `web_ui.py`)
+- **Reduced transitions per rollout**: Lowered `n_envs` from `10` to `4`, and `n_steps` from `2048` to `256`. 
+- **Increased update count**: This changes the transitions collected per update to `4 × 256 × 4 = 4,096` agent transitions. In a `500,000` timestep run, PPO now gets **122 training updates** (and **244 updates** at 1M steps), providing the policy with the depth needed to learn.
+- **Adjusted Batch Size**: Set `batch_size = 128` to divide the `4,096` transition buffer cleanly.
+
+#### 2. Invalid Action Penalty Tuning (`marl_ota_env.py`)
+- **Increased Penalty to `−15.0`**: Under the rescaled costs, a valid step costs between `−0.66` (Copy) and `−6.54` (Modify+Backup). With the invalid action penalty at `−2.0`, doing an invalid action was sometimes *better* than taking an expensive Modify+Backup step, causing the model to get stuck in invalid selections. Raising it to `−15.0` ensures any valid action is always preferred over selecting an already-completed block.
+
+### Expected Outcome
+With 122 PPO updates and a clear penalty gradient, the policy should now successfully learn to:
+1. Match block masks and select valid actions.
+2. Avoid invalid action truncations (dropping the count of invalid actions to ~0).
+3. Converge toward the optimal path (Copy actions) and clear the `-40.0` benchmark.
+
+### Verification
+- Tested unit tests: `python test_fp3o.py` and `python test_marl_env.py` both PASS.
+
+---
+
 ## 2026-07-09 (Session 4) — Reward Shaping Refinement & Training Depth Increase
 
 ### Context
