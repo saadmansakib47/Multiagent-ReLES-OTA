@@ -4,6 +4,37 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 
 ---
 
+## 2026-07-09 (Session 4) — Reward Shaping Refinement & Training Depth Increase
+
+### Context
+After correcting the safety-shield memory limit (Session 3), the score regressed from `−47.49` to `−111.55`. Analysis confirmed that the previous `−47.49` was **a false improvement**: with the bugged 15% memory limit, the safety shield was firing on ~50% of steps and returning `0.0` reward for those steps (free pass, no cost paid), artificially inflating the score. With the corrected 85% limit, agents now pay real costs for every action but the policy hadn't yet learned to select cheap Copy operations. Score of `−111.55` ≈ IPPO baseline, indicating the policy is essentially random at 500k timesteps.
+
+### Completed Work
+
+#### 1. Reward Shaping — Invalid Action Signal (`marl_ota_env.py`)
+- **Increased invalid-action penalty** from `−1.0` to `−2.0`. The cheapest valid action (Copy) costs ~`−0.66` per step; at `−1.0` the invalid-action penalty was sometimes *cheaper* than attempting a valid Modify step, giving no gradient incentive to choose valid blocks.
+- **Per-agent step-budget truncation**: Added `current_step[agent] >= max_steps` truncation inside the action loop so that agents exhausting their step budget are cleanly terminated rather than continuing to accumulate `−2.0` invalid-action penalties indefinitely.
+- **Progress bonus** (`+0.5`): Added a small fixed bonus to the Shapley reward whenever a valid action is executed. This creates a clear gradient: valid action > invalid action, regardless of which operation (Copy/Modify/MB) is chosen.
+
+#### 2. Training Depth (`config.py` & `web_ui.py`)
+- **`total_timesteps`**: Increased default from `500,000` to `1,000,000` per seed. At 500k with 10 envs and 2048 n_steps, the model completes ~24 rollout collections — marginal for convergence on a multi-agent problem.
+- **`ent_coef`**: Raised from `0.02` to `0.05` to encourage early exploration of the action space. FP3O needs to discover that Copy operations (low cost) dominate Modify+Backup (5× higher cost), which requires broad initial exploration.
+
+### Expected Outcome
+With the progress bonus and tighter invalid-action penalty, the policy should now learn to:
+1. Prefer valid block indices over already-finished ones
+2. Prefer Copy operations over expensive Modify+Backup
+3. Complete all blocks (earning `+10.0 × n_agents` completion bonus)
+
+Target: mean return > `−40.0` after 1M steps per seed, 3 seeds.
+
+### Verification
+- Re-run with same settings (n_blocks=8, n_agents=4, seeds=3, timesteps=1M).
+- Expect shield rate to remain near 0% (correct 85% limit is rarely hit).
+- Expect score to move from −111.55 toward −40.0 or better.
+
+---
+
 ## 2026-07-09 (Session 3) — Safety Shield Bug Fix (Memory Limit Inversion)
 
 ### Context

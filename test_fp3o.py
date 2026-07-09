@@ -108,6 +108,7 @@ def test_fp3o_architecture():
         "memory_used":       spaces.Box(0, 1.0,   (1,), dtype=np.float32),
         "step":              spaces.Box(0, n_blocks + 10, (1,), dtype=np.int32),
         "agent_id":          spaces.Box(0, 1.0, (4,), dtype=np.float32),
+        "state":             spaces.Box(-np.inf, np.inf, (80,), dtype=np.float32),
     })
     act_space = spaces.MultiDiscrete([n_blocks, 3])
     
@@ -138,12 +139,13 @@ def test_fp3o_architecture():
         "memory_used":       torch.zeros(batch_size, 1, dtype=torch.float32),
         "step":              torch.zeros(batch_size, 1, dtype=torch.float32),
         "agent_id":          torch.eye(4)[:batch_size], # One-hot ids
+        "state":             torch.zeros(batch_size, 80, dtype=torch.float32),
     }
     
     # Check Backbone Forward
-    features = policy_engine.extract_features(mock_obs)
-    print(f"Shared Backbone output shape: {features.shape} (Expected: [batch_size, 128])")
-    assert features.shape == (batch_size, 128), "Backbone output shape mismatch!"
+    features_pi, features_vf = policy_engine.extract_features(mock_obs)
+    print(f"Shared Backbone pi shape: {features_pi.shape}, vf shape: {features_vf.shape} (Expected: [batch_size, 128])")
+    assert features_pi.shape == (batch_size, 128) and features_vf.shape == (batch_size, 128), "Backbone output shape mismatch!"
     
     # Forward for Engine Head
     actions_eng, values_eng, log_probs_eng = policy_engine(mock_obs)

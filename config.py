@@ -72,7 +72,7 @@ TRAIN_CFG = dict(
     gae_lambda     = 0.95,
     gamma          = 0.99,
     clip_range     = 0.2,
-    ent_coef       = 0.02,   # slightly higher entropy to encourage exploration early
+    ent_coef       = 0.05,   # higher entropy to explore cheap Copy ops early; tune down once converging
     vf_coef        = 0.5,
     max_grad_norm  = 0.5,
 
@@ -80,7 +80,7 @@ TRAIN_CFG = dict(
     n_envs         = 10,     # matches Ryzen 5 5600 12-thread budget
 
     # Experiment scale
-    total_timesteps= 500_000,  # per seed
+    total_timesteps= 1_000_000,  # per seed; 500k not enough for FP3O to discover optimal ops
     n_seeds        = 10,
 
     # Convergence / budget stop
