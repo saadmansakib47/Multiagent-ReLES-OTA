@@ -68,6 +68,8 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.callbacks import BaseCallback
 # pyrefly: ignore [missing-import]
 from gymnasium import spaces
+# pyrefly: ignore [missing-import]
+from sb3_contrib.common.maskable.distributions import MaskableMultiCategoricalDistribution
 
 
 # ══════════════════════════════════════════════════════════════
@@ -463,10 +465,48 @@ class FP3OPolicy(ActorCriticPolicy):
 
         self.mlp_extractor = _IdentityExtractor(latent_dim)
 
-    def _get_action_dist_from_latent(self, latent_pi: torch.Tensor, obs: Optional[Dict[str, torch.Tensor]] = None):
+    def _build_action_mask(
+        self,
+        obs: Optional[Dict[str, torch.Tensor]],
+        batch_size: int,
+        device: torch.device,
+    ) -> Optional[torch.Tensor]:
+        """
+        Build a boolean mask tensor of shape ``(batch_size, n_blocks + 3)``
+        from ``obs["mask"]``.
+
+        Dead-agent rows (where every block bit is 0) are replaced with
+        all-True so that the distribution remains well-defined.  The sampled
+        action is discarded by ``step()`` for dead agents, so the distribution
+        content is irrelevant — but it must not be all-False or
+        ``MaskableMultiCategoricalDistribution`` will produce NaN / crash.
+        """
+        if obs is None or not isinstance(obs, dict) or "mask" not in obs:
+            return None
+
+        raw = obs["mask"]  # (batch, n_blocks), int or bool
+        if not isinstance(raw, torch.Tensor):
+            raw = torch.tensor(raw, dtype=torch.bool, device=device)
+        else:
+            raw = raw.bool().to(device)
+
+        # Dead-agent fix: any row that is all-False gets replaced with all-True
+        all_invalid = ~raw.any(dim=-1, keepdim=True)          # (batch, 1)
+        block_mask  = torch.where(all_invalid.expand_as(raw), # (batch, n_blocks)
+                                   torch.ones_like(raw), raw)
+
+        op_mask = torch.ones(batch_size, 3, dtype=torch.bool, device=device)
+        return torch.cat([block_mask, op_mask], dim=-1)        # (batch, n_blocks+3)
+
+    def _get_action_dist_from_latent(
+        self,
+        latent_pi: torch.Tensor,
+        obs: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> MaskableMultiCategoricalDistribution:
         """
         Override: compute action distribution from the shared latent code.
         Selects the ECU-type-specific action head and position head.
+        Applies action masking from obs["mask"] (no ActionMasker needed).
         """
         if self.algorithm in ["ippo", "mappo"]:
             # Shared head for all agents
@@ -476,17 +516,17 @@ class FP3OPolicy(ActorCriticPolicy):
             agent_id_batch = obs["agent_id"]  # shape: (batch_size, n_agents)
             agent_indices = agent_id_batch.argmax(dim=-1)  # shape: (batch_size,)
             batch_ecu_type_indices = self.agent_idx_to_ecu_type[agent_indices]  # shape: (batch_size,)
-            
+
             action_logits_stacked = torch.stack([
                 head(latent_pi) for head in self.action_heads
             ], dim=1)  # shape: (batch_size, 4, 3)
-            
+
             position_logits_stacked = torch.stack([
                 head(latent_pi) for head in self.position_heads
             ], dim=1)  # shape: (batch_size, 4, n_blocks)
-            
+
             batch_indices = torch.arange(latent_pi.shape[0], device=latent_pi.device)
-            action_logits = action_logits_stacked[batch_indices, batch_ecu_type_indices]
+            action_logits   = action_logits_stacked[batch_indices, batch_ecu_type_indices]
             position_logits = position_logits_stacked[batch_indices, batch_ecu_type_indices]
         else:
             # Fallback to static ecu_type_idx
@@ -494,11 +534,36 @@ class FP3OPolicy(ActorCriticPolicy):
             position_logits = self.position_heads[self.ecu_type_idx](latent_pi)
 
         # MultiDiscrete distribution: [block_idx_dist, operation_dist]
-        # SB3's MultiCategoricalDistribution expects a single concatenated flat tensor
+        # Concatenated logits order: [position_logits | action_logits]
         concat_logits = torch.cat([position_logits, action_logits], dim=1)
-        return self.action_dist.proba_distribution(
-            action_logits=concat_logits
+
+        # Build mask from obs["mask"] — derived from the stored observation
+        # so it is consistent between rollout collection and PPO update.
+        action_mask = self._build_action_mask(
+            obs, batch_size=latent_pi.shape[0], device=latent_pi.device
         )
+
+        # Use library masking-aware distribution (correct log_prob / entropy)
+        dist = MaskableMultiCategoricalDistribution([self.n_blocks, 3])
+        dist.proba_distribution(action_logits=concat_logits)
+        if action_mask is not None:
+            dist.apply_masking(action_mask)
+        return dist
+
+    def get_distribution(self, obs: Dict[str, torch.Tensor]) -> MaskableMultiCategoricalDistribution:
+        """
+        Override get_distribution() to pass obs explicitly to
+        _get_action_dist_from_latent so FP3O's per-sample ECU-type routing
+        continues to work (base class calls it with only latent_pi).
+
+        Calls pi_features_extractor directly (instead of self.extract_features)
+        to avoid SB3 2.9's extract_features returning a (pi, vf) tuple when
+        share_features_extractor=False, which would crash the linear layers.
+        """
+        features  = self.pi_features_extractor(obs)
+        latent_pi = self.mlp_extractor.forward_actor(features)
+        return self._get_action_dist_from_latent(latent_pi, obs)
+
 
     def predict_values(self, obs: PyTorchObs) -> torch.Tensor:
         """
@@ -519,13 +584,15 @@ class FP3OPolicy(ActorCriticPolicy):
         """
         Override to inject value normalization into the training loop.
         Called inside PPO's learn() during gradient computation.
+        Passes obs to _get_action_dist_from_latent for ECU-type routing
+        and for consistent obs-derived action masking.
         """
         pi_features = self.pi_features_extractor(obs)
         if self.share_features_extractor:
             vf_features = pi_features
         else:
             vf_features = self.vf_features_extractor(obs)
-            
+
         latent_pi = self.mlp_extractor(pi_features)[0]
         latent_vf = self.mlp_extractor(vf_features)[1]
 

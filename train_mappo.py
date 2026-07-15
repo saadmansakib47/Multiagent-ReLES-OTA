@@ -157,11 +157,54 @@ def train_algorithm(
         # pyrefly: ignore [import, missing-import]
         from stable_baselines3.common.vec_env import VecMonitor
         # pyrefly: ignore [import, missing-import]
+        from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+        # pyrefly: ignore [import, missing-import]
         from fp3o_policy import FP3OPolicy, ValueNormalizationCallback, make_fp3o_policy_kwargs
     except ImportError as e:
         print(f"  ❌  Missing dependency: {e}")
-        print("  Install with:  pip install supersuit stable-baselines3")
+        print("  Install with:  pip install supersuit stable-baselines3 sb3-contrib")
         return
+
+    # ── Invalid-action rate tracker ──
+    class InvalidActionRateCallback(BaseCallback):
+        """
+        Counts steps where info["invalid_action"] == True across the rollout
+        and logs ``rollout/invalid_action_rate`` via SB3's logger.
+
+        With action masking active in FP3OPolicy this rate should be exactly 0%
+        (invalid block indices are never sampled).  Any non-zero value indicates
+        a masking path that was not reached (e.g. the obs-based mask was None).
+        """
+        def __init__(self):
+            super().__init__(verbose=0)
+            self._invalid_steps = 0
+            self._total_steps   = 0
+
+        def _on_step(self) -> bool:
+            infos = self.locals.get("infos", [])
+            for info in infos:
+                self._total_steps += 1
+                if info.get("invalid_action", False):
+                    self._invalid_steps += 1
+            return True
+
+        def _on_rollout_end(self) -> None:
+            rate = (
+                self._invalid_steps / self._total_steps
+                if self._total_steps > 0 else 0.0
+            )
+            self.logger.record("rollout/invalid_action_rate", rate)
+            self.logger.record("rollout/invalid_action_steps", self._invalid_steps)
+            if self._invalid_steps > 0:
+                print(
+                    f"  [warn] invalid_action_rate={rate:.4%}  "
+                    f"({self._invalid_steps}/{self._total_steps} steps) — "
+                    "masking may not be covering all paths"
+                )
+            # Reset accumulators for next rollout
+            self._invalid_steps = 0
+            self._total_steps   = 0
+
 
     print(f"\n Training {algorithm.upper()} on MultiAgentOTAEnv")
     print(f"   n_agents={n_agents}, n_blocks={n_blocks}, bd_mode={bd_mode}, safety={safety}")
@@ -251,7 +294,10 @@ def train_algorithm(
 
     print(f"\n  Starting {algorithm.upper()} training on {selected_device}...")
     t0 = time.time()
-    callback = ValueNormalizationCallback()
+    callback = CallbackList([
+        ValueNormalizationCallback(),
+        InvalidActionRateCallback(),
+    ])
     model.learn(total_timesteps=total_timesteps, progress_bar=True, callback=callback)
     elapsed = time.time() - t0
 

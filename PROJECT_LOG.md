@@ -4,6 +4,25 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 
 ---
 
+## 2026-07-15 (Phase 2, Step 2) — Invalid-Action Penalty Fix via Action Masking
+
+**Hypothesis**: Invalid block indices were being sampled by the policy, penalized (`-15.0`), and discarded. As valid blocks dwindled, the proportion of invalid actions skyrocketed, causing invalid-action penalties to completely dominate the return (driving it down to ~-1300). By preventing these actions at the policy level via masking, the agent will learn the real environment dynamics much faster without the penalty noise.
+
+**Implementation**:
+1. Added `sb3-contrib` to use `MaskableMultiCategoricalDistribution`.
+2. Fixed a dead-code bug in `marl_ota_env.py` where the step-limit truncation penalty was unreachable because of an early `truncations[agent]=True` loop.
+3. Implemented obs-based masking directly inside `fp3o_policy.py`:
+    * Derived mask from `obs["mask"]` + a dummy all-True mask for dead agents to prevent NaN/crashes.
+    * Integrated this directly into `_get_action_dist_from_latent` and bypassed `ActionMasker`, keeping stock `PPO` and avoiding the PettingZoo Parallel vs AEC `agent_selection` issues entirely.
+    * Addressed SB3 2.9 extraction quirk where `share_features_extractor=False` passed a tuple during evaluation, fixing an evaluation crash.
+4. Added `InvalidActionRateCallback` to `train_mappo.py`.
+
+**Results (Smoke Test, 20k steps)**:
+* `invalid_action_rate`: **0%** exactly, confirming the mask perfectly restricts the sampled action subspace.
+* `ep_rew_mean`: Improved from **~-1380 to -228.22** on a very short 20k-step run. The policy gradient is no longer being overwhelmed by `-15.0` penalties from proposing completed blocks.
+
+**Next Steps**: A full 500k/1M step training run across 10 seeds is now expected to hit or get very close to the target benchmark of -40.0.
+
 ## 2026-07-09 (Session 5) — PPO Update Frequency Bottleneck Fix & Invalid Action Penalty Tuning
 
 ### Context

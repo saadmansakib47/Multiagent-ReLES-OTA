@@ -334,12 +334,6 @@ class MultiAgentOTAEnv(ParallelEnv):
             obs = {a: self._get_obs(a) for a in self.possible_agents}
             return obs, rewards, dict(self.terminations), dict(self.truncations), infos
 
-        # ── Step-limit truncation check first ──
-        for agent in self.possible_agents:
-            if not (self.terminations[agent] or self.truncations[agent]):
-                if self.current_step[agent] >= self.max_steps:
-                    self.truncations[agent] = True
-
         # ── Compute valid actions and proposed overhead ──
         valid_actions = {} 
         proposed_overhead = {}
@@ -558,6 +552,30 @@ class MultiAgentOTAEnv(ParallelEnv):
                 f"payload={payload:8.1f}  mem={mem:8.1f}"
             )
         print("─" * 65)
+
+    def action_masks(self, agent: str) -> np.ndarray:
+        """
+        Return a boolean mask of length ``n_blocks + 3`` for masking-aware
+        policy distributions.
+
+        Layout
+        ------
+        - Indices  0 … n_blocks-1 : block dimension (1=valid, 0=already done)
+        - Indices  n_blocks … n_blocks+2 : operation dimension (always valid)
+
+        Dead-agent note
+        ---------------
+        Terminated / truncated agents return **all-True** (dummy valid mask).
+        ``step()`` discards their sampled action and returns ``rewards=0.0``
+        anyway, so the distribution content is irrelevant.  An all-False mask
+        would cause NaN / errors in MaskableMultiCategoricalDistribution.
+        """
+        if self.terminations.get(agent, False) or self.truncations.get(agent, False):
+            # Dummy all-valid mask — action is discarded by step() regardless
+            return np.ones(self.n_blocks + 3, dtype=bool)
+        block_mask = self.masks[agent].astype(bool)     # shape (n_blocks,)
+        op_mask    = np.ones(3, dtype=bool)             # operations always valid
+        return np.concatenate([block_mask, op_mask])
 
     def close(self):
         pass
