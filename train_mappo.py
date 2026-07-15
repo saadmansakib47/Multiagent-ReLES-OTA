@@ -269,6 +269,13 @@ def train_algorithm(
     else:
         selected_device = device
 
+    from typing import Callable
+    def linear_schedule(initial_value: float) -> Callable[[float], float]:
+        """Linear learning rate schedule."""
+        def func(progress_remaining: float) -> float:
+            return progress_remaining * initial_value
+        return func
+
     model = PPO(
         policy          = FP3OPolicy,
         env             = env,
@@ -276,7 +283,7 @@ def train_algorithm(
         verbose         = 1,
         device          = selected_device,
         tensorboard_log = f"{save_dir}/logs/{algorithm}_{'bd' if bd_mode else 'generic'}",
-        learning_rate   = 3e-4,
+        learning_rate   = linear_schedule(3e-4),
         n_steps         = n_steps,
         batch_size      = batch_size,
         n_epochs        = n_epochs,

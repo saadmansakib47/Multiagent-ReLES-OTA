@@ -72,7 +72,7 @@ TRAIN_CFG = dict(
     gae_lambda     = 0.95,
     gamma          = 0.99,
     clip_range     = 0.2,
-    ent_coef       = 0.01,   # lower entropy allows PPO to converge on valid block selections
+    ent_coef       = 0.001,  # lowered from 0.01 to force exploitation of Copy ops
     vf_coef        = 0.5,
     max_grad_norm  = 0.5,
 
@@ -80,7 +80,7 @@ TRAIN_CFG = dict(
     n_envs         = 4,      # was 10
 
     # Experiment scale
-    total_timesteps= 500_000,  # per seed; now provides 488 updates (was only 12 at 1M steps!)
+    total_timesteps= 2_000_000,  # extended for final fine-tuning
     n_seeds        = 10,
 
     # Convergence / budget stop

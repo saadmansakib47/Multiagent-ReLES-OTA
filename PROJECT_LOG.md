@@ -4,6 +4,20 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 
 ---
 
+## 2026-07-16 (Phase 2, Step 3) — PPO Hyperparameter Tuning for Payload Optimization
+
+**Context**: After 1M steps of training, the model's return improved dramatically to `-69.86` and the shield rate dropped to a perfect `0.0`, meaning it successfully learned to avoid violating memory bounds. However, the `Mean_Payload_Cost` was sitting at `90,640.9` (target: `< 5000`).
+**Diagnosis**: The classic RL "exploration vs exploitation" problem. The PPO entropy coefficient (`ent_coef = 0.01`) was forcing the policy to remain slightly random. Because the completion bonus (`+10` per agent) and the invalid-action penalty (`-15.0`) dwarfed the payload cost differences between `Copy`, `Modify`, and `MB` operations, the policy settled in a local optimum: perfectly selecting valid blocks but randomly selecting operations to satisfy the entropy constraint.
+
+**Implementation (Hyperparameter Fixes)**:
+1. **Reduced Entropy (`config.py`)**: Lowered `ent_coef` from `0.01` to `0.001` to suppress exploration and force the policy to exploit the cheapest operation (`Copy`).
+2. **Linear LR Schedule (`train_mappo.py`)**: Replaced the constant `3e-4` learning rate with a linear decay schedule (`linear_schedule(3e-4)`). This prevents the policy from bouncing out of the optimal global minimum at the end of training.
+3. **Extended Horizon (`config.py`)**: Increased `total_timesteps` to `2,000,000` to give the policy the necessary time to fine-tune operations.
+
+**Expected Outcome**: The policy should now completely stop exploring suboptimal operations, collapse onto `Operation 0` (Copy), and drop the payload cost under 5,000, bringing the mean return past the `-40.0` benchmark.
+
+---
+
 ## 2026-07-15 (Phase 2, Step 2) — Invalid-Action Penalty Fix via Action Masking
 
 **Hypothesis**: Invalid block indices were being sampled by the policy, penalized (`-15.0`), and discarded. As valid blocks dwindled, the proportion of invalid actions skyrocketed, causing invalid-action penalties to completely dominate the return (driving it down to ~-1300). By preventing these actions at the policy level via masking, the agent will learn the real environment dynamics much faster without the penalty noise.
