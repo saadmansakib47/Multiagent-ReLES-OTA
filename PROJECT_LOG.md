@@ -3,22 +3,31 @@
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
 ---
-## 2026-07-17 (Phase 3, Step 1) — PPO Stable Learning Fix (Linear LR Schedule)
-**Context**: After 1.5M steps of training, the model's performance abruptly collapsed. The mean return plummeted from ~-60.0 to over -800.0, and the mean invalid-action rate spiked from ~0% to ~43%. Visual inspection of the training curve showed a sharp "cliff drop" around the 1.3M-1.4M timestep mark.
-**Diagnosis**: The cause was traced to the linear learning rate schedule. SB3's `PPO.learn` method calculates `progress_remaining` as `1.0 - (num_timesteps / total_timesteps)`. Due to floating-point arithmetic and the exact timing of the final update, `num_timesteps` slightly exceeded `total_timesteps` at the end of the run. This resulted in a `progress_remaining` value < 0, which, when multiplied by the learning rate, produced a negative learning rate. This immediately caused the loss function to explode and the policy to collapse (NaN gradients).
+## 2026-07-16 (Phase 3, Step 1) — NaN Logits Root Cause Analysis & Fix
 
-**Implementation (Hardened LR Schedule)**:
-1. Modified `train_mappo.py` to clamp `progress_remaining` to `0.0` before multiplying by the learning rate.
-2. Updated the schedule calculation in `train_mappo.py`:
-   ```python
-   def linear_schedule(initial_value: float) -> Callable[[float], float]:
-       """Linear learning rate schedule."""
-       def func(progress_remaining: float) -> float:
-           # Clamp to 0.0 to prevent negative learning rates from float precision issues
-           return max(0.0, progress_remaining * initial_value)
-       return func
-   ```
-**Expected Outcome**: The learning rate will now smoothly decay to 0.0 without ever becoming negative. The policy will continue to converge stably, avoiding the catastrophic failure mode observed at 1.4M timesteps.
+**Observed symptom**: Training crashed with `ValueError: NaN in MaskableCategorical logits` at ~1.3–1.4M timesteps during a 2M step run. The same run was stable at 1M steps.
+
+**Root Cause Analysis (three interacting failure modes)**:
+
+1. **Primary: Double-normalization in `ValueNormalizationCallback` (fp3o_policy.py)**:
+   The callback was overwriting `rollout_buffer.returns` and `rollout_buffer.values` with normalized copies at the end of *every* rollout. This is cumulative — after `N` rollouts the buffer contains data that has been z-scored `N` times. As the `running_var` converged toward `epsilon` (1e-4) around 1.3M steps, `running_std ≈ 1e-4`, so `normalize()` scaled values by `1/1e-4 = 10,000x`, producing `Inf → NaN` in the value targets. These NaN values backpropagated through the critic and then into the shared backbone, corrupting all logits.
+
+2. **Secondary: Negative learning rate at training end**:
+   The `linear_schedule` produced `progress_remaining × LR` where `progress_remaining` could go slightly negative when `num_timesteps` overshot `total_timesteps` at rollout boundaries. A negative LR turns the Adam optimizer into gradient *ascent*, instantly exploding weights. *Fixed in previous session with `max(0.0, ...)`.*
+
+3. **Contributing: Low entropy + large logit magnitudes**:
+   At `ent_coef=0.001`, the policy becomes almost deterministic. Over long runs, position head logits grow without bound (no entropy regularization), making the masked softmax numerically unstable for near-zero probability actions.
+
+**Fixes Applied**:
+1. **`ValueNormalizationCallback` (`fp3o_policy.py`)**: Removed all in-place rollout buffer mutation. The callback now *only* calls `value_normalizer.update(returns_tensor)` to maintain running statistics. The value normalization path that actually matters (inside `evaluate_actions()`) was already correct and untouched.
+2. **`SharedBackbone.forward()` (`fp3o_policy.py`)**: Added `torch.nan_to_num(out, nan=0.0)` guard. If a numerical edge case produces NaN in the backbone output, it is clamped to 0.0 so training can continue rather than propagating NaN through every downstream head.
+3. **`linear_schedule` clamping (`train_mappo.py`)**: The schedule now returns `max(0.0, progress_remaining * lr)`, preventing a negative learning rate when `num_timesteps` slightly overshoots `total_timesteps` at the final rollout boundary.
+
+**Verification**:
+- Run unit tests: `python test_fp3o.py` and `python test_marl_env.py` — both must PASS.
+- Restart 2M step training run. The crash should no longer occur. Watch that `value_loss` in the SB3 log stays finite (< 10,000) throughout training.
+
+**Next Steps**: With the NaN crash resolved, re-run the 2M timestep benchmark. Expect the payload cost to converge toward < 5,000 and mean return to approach or beat the `-40.0` target.
 
 ---
 

@@ -205,7 +205,13 @@ class SharedBackbone(nn.Module):
                 nn.init.constant_(m.bias, 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        out = self.net(x)
+        # NaN guard: if the backbone produces NaN (e.g. from an exploding
+        # gradient path), replace with zeros so the policy can recover rather
+        # than propagating NaN through all heads.
+        if torch.isnan(out).any():
+            out = torch.nan_to_num(out, nan=0.0)
+        return out
 
 
 # ══════════════════════════════════════════════════════════════
@@ -635,8 +641,16 @@ class FP3OPolicy(ActorCriticPolicy):
 
 class ValueNormalizationCallback(BaseCallback):
     """
-    Callback to update value normalizer running statistics and normalize targets
-    in the rollout buffer prior to gradient steps.
+    Callback to update the ValueNormalizer's running statistics (mean/var)
+    at the end of each rollout.
+
+    IMPORTANT: This callback ONLY updates statistics — it does NOT normalize
+    the rollout buffer in-place. Mutating the buffer cumulatively (once per
+    rollout) caused the running_var to collapse near epsilon after ~1.3M steps,
+    producing a 1/epsilon ≈ 10,000x scaling that exploded weights to NaN.
+
+    The normalization is applied correctly and once-only inside
+    evaluate_actions() / predict_values() via the policy's value_normalizer.
     """
     def __init__(self, verbose: int = 0):
         super().__init__(verbose)
@@ -649,14 +663,8 @@ class ValueNormalizationCallback(BaseCallback):
         if hasattr(policy, "value_normalizer"):
             returns = self.model.rollout_buffer.returns
             returns_tensor = torch.tensor(returns, dtype=torch.float32, device=policy.device)
+            # Update running statistics only — do NOT overwrite the buffer.
             policy.value_normalizer.update(returns_tensor)
-            
-            # Normalize returns and values in rollout buffer
-            self.model.rollout_buffer.returns = policy.value_normalizer.normalize(returns_tensor).cpu().numpy()
-            
-            values = self.model.rollout_buffer.values
-            values_tensor = torch.tensor(values, dtype=torch.float32, device=policy.device)
-            self.model.rollout_buffer.values = policy.value_normalizer.normalize(values_tensor).cpu().numpy()
 
 # ══════════════════════════════════════════════════════════════
 #  Convenience factory function
