@@ -273,7 +273,10 @@ def train_algorithm(
     def linear_schedule(initial_value: float) -> Callable[[float], float]:
         """Linear learning rate schedule."""
         def func(progress_remaining: float) -> float:
-            return progress_remaining * initial_value
+            # SB3's num_timesteps can slightly overshoot total_timesteps at the end of a rollout,
+            # causing progress_remaining to be slightly negative. Clamp it to 0 to prevent
+            # a negative learning rate (which causes instant gradient explosion and NaNs).
+            return max(0.0, progress_remaining * initial_value)
         return func
 
     model = PPO(
