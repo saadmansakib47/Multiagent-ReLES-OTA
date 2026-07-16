@@ -206,11 +206,12 @@ class SharedBackbone(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.net(x)
-        # NaN guard: if the backbone produces NaN (e.g. from an exploding
-        # gradient path), replace with zeros so the policy can recover rather
-        # than propagating NaN through all heads.
-        if torch.isnan(out).any():
-            out = torch.nan_to_num(out, nan=0.0)
+        # Guard against NaN or +Inf (can occur during rare gradient spikes).
+        # nan_to_num replaces nan→0, +inf→max_float, -inf→min_float.
+        # We additionally clamp to a safe range to prevent downstream linear
+        # layers from overflowing exp() inside MaskableCategorical.
+        if not torch.isfinite(out).all():
+            out = torch.nan_to_num(out, nan=0.0, posinf=1.0, neginf=-1.0)
         return out
 
 
@@ -549,6 +550,12 @@ class FP3OPolicy(ActorCriticPolicy):
             obs, batch_size=latent_pi.shape[0], device=latent_pi.device
         )
 
+        # Clamp logits to a safe range before the masked distribution.
+        # Large logits cause exp() overflow → +Inf → logsumexp=+Inf → logit-Inf=NaN.
+        # A clamp of [-20, 20] is safe: softmax(20) ≈ 1.0 (fully certain),
+        # so no valid policy needs logits outside this range.
+        concat_logits = concat_logits.clamp(-20.0, 20.0)
+
         # Use library masking-aware distribution (correct log_prob / entropy)
         dist = MaskableMultiCategoricalDistribution([self.n_blocks, 3])
         dist.proba_distribution(action_logits=concat_logits)
@@ -606,9 +613,14 @@ class FP3OPolicy(ActorCriticPolicy):
         log_prob       = distribution.log_prob(actions)
         entropy        = distribution.entropy()
 
-        # Critic: return normalized values (training regresses on normed targets)
-        values_normed = self.critic_head(latent_vf)
-        return values_normed, log_prob, entropy
+        # Critic: SB3's PPO computes MSE(values, return_batch) where return_batch
+        # is raw (un-normalized) returns from the rollout buffer.  We must
+        # therefore return DENORMALIZED values so both sides are on the same
+        # reward scale.  Returning values_normed here caused a permanent scale
+        # mismatch (critic ≈ 0.5 vs targets ≈ -100), generating a value_loss
+        # of ~10,000 per sample that gradually exploded backbone weights → NaN.
+        values_raw = self.value_normalizer.denormalize(self.critic_head(latent_vf))
+        return values_raw, log_prob, entropy
 
     def forward(
         self,
