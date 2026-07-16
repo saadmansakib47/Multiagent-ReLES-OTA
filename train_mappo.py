@@ -252,8 +252,9 @@ def train_algorithm(
     env.seed = lambda seed=None: None
     
     # Apply native SB3 Normalization BEFORE VecMonitor
-    # This automatically bounds observations and rewards to safe ranges ([-10, 10]).
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_reward=10.0, clip_obs=10.0)
+    # We set norm_obs=False because the Dict space contains MultiBinary masks.
+    # The network's internal LayerNorm handles observation scaling perfectly.
+    env = VecNormalize(env, norm_obs=False, norm_reward=True, clip_reward=10.0)
     
     env = VecMonitor(env)
 
