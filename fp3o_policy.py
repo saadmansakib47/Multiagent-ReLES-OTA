@@ -550,11 +550,13 @@ class FP3OPolicy(ActorCriticPolicy):
             obs, batch_size=latent_pi.shape[0], device=latent_pi.device
         )
 
-        # Clamp logits to a safe range before the masked distribution.
-        # Large logits cause exp() overflow → +Inf → logsumexp=+Inf → logit-Inf=NaN.
-        # A clamp of [-20, 20] is safe: softmax(20) ≈ 1.0 (fully certain),
-        # so no valid policy needs logits outside this range.
-        concat_logits = concat_logits.clamp(-20.0, 20.0)
+        # Clamp logits to a tighter safe range before the masked distribution.
+        # Max ratio in PPO is exp(max_logit - min_logit). If range is [-10, 10],
+        # max ratio is exp(20) ≈ 4.8e8. Gradient squared is ~1e17, which easily
+        # fits in float32. A range of [-20, 20] allowed exp(40) ≈ 2e17, squaring
+        # to 4e34, which could overflow float32 max (3.4e38) when multiplied
+        # by advantages, producing NaN gradients in Adam.
+        concat_logits = concat_logits.clamp(-10.0, 10.0)
 
         # Use library masking-aware distribution (correct log_prob / entropy)
         dist = MaskableMultiCategoricalDistribution([self.n_blocks, 3])

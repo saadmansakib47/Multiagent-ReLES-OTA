@@ -296,6 +296,7 @@ def train_algorithm(
         ent_coef        = ent_coef,
         vf_coef         = 0.5,
         max_grad_norm   = 0.5,
+        target_kl       = 0.05,
         seed            = seed,
     )
     # Seed RNGs with the per-seed value so each seed genuinely differs

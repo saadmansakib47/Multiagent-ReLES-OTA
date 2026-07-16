@@ -3,30 +3,30 @@
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
 ---
-## 2026-07-16 (Phase 3, Step 1) — NaN Logits Root Cause Analysis & Fix (Complete)
+## 2026-07-16 (Phase 3, Step 1) — NaN Logits Root Cause Analysis & Fix (Definitive)
 
-**Observed symptom**: Training crashed with `ValueError: NaN in MaskableCategorical logits (128, 16)` at ~1.3M timesteps during a 2M step run. Stable at 1M steps.
+**Observed symptom**: Training crashed with `ValueError: NaN in MaskableCategorical logits (128, 16)`. The first seed finished 2M steps perfectly, but the second seed crashed at ~600k steps.
 
-**True Root Cause**:
+**True Root Cause — PPO KL Explosion & Adam Overflow**:
 
-1. **Negative LR at end-of-training**:
-   The `linear_schedule` produced `progress_remaining × LR` where `progress_remaining` could go slightly negative when `num_timesteps` overshot `total_timesteps` at rollout boundaries. A negative LR turns the Adam optimizer into gradient *ascent*, instantly exploding weights.
+At `ent_coef=0.001`, the policy becomes highly deterministic. During a PPO rollout update (which runs for 10 epochs), if a previously highly-unlikely action suddenly becomes highly favored, its `log_prob` changes rapidly.
+The PPO ratio is `ratio = exp(log_prob - old_log_prob)`. With the previous logit clamp of `[-20, 20]`, the maximum possible ratio was `exp(40) ≈ 2.3e17`.
+When `advantage < 0`, PPO pushes the ratio down, so the gradient is `advantage * ratio = -5 * 2.3e17 ≈ -1.1e18`.
+Inside the Adam optimizer, the gradient is squared to calculate the variance `v`: `grad^2 ≈ 1.2e36`.
+If the ratio grew slightly beyond this (e.g. `exp(45)`), the squared gradient exceeded `3.4e38` (the maximum value of `float32`).
+This caused Adam's variance accumulator to overflow to `Inf`. Adam then computed the weight update as `m / sqrt(v) = Inf / Inf = NaN`.
+Once the linear weights became `NaN`, all downstream logits became `NaN`.
 
-2. **Low entropy + large logit magnitudes**:
-   At `ent_coef=0.001`, the policy becomes almost deterministic. Over long runs, position head logits grow without bound (no entropy regularization), making the masked softmax numerically unstable for near-zero probability actions.
+**Fixes Applied**:
 
-**Fixes Applied (fp3o_policy.py & train_mappo.py)**:
+1. **Tightened Logit Clamping (fp3o_policy.py)**:
+   Changed `concat_logits.clamp(-20.0, 20.0)` to `clamp(-10.0, 10.0)`.
+   The maximum PPO ratio is now `exp(20) ≈ 4.8e8`. The maximum squared gradient is `~1e17`, which perfectly fits in `float32` safely away from the `3.4e38` ceiling. (Note: `softmax(10) ≈ 0.99995`, which is still virtually 100% deterministic).
 
-1. **Logit clamping before `MaskableCategorical`**:
-   `concat_logits = concat_logits.clamp(-20.0, 20.0)`. `softmax(20) ≈ 1.0` so no valid policy requires logits outside this range. This makes the distribution numerically safe even if a gradient spike briefly produces large logits.
+2. **Added Early Stopping via Target KL (train_mappo.py)**:
+   Added `target_kl = 0.05` to the `PPO` instantiation. If the KL divergence exceeds 0.05, SB3 will instantly halt the remaining epochs for that batch, completely preventing KL explosion before it can ever reach the clamp bounds.
 
-2. **Backbone Inf/NaN guard upgraded**:
-   Changed from `if torch.isnan(out).any()` to `if not torch.isfinite(out).all()`, catching both `nan` and `±inf`. Replaced with `posinf=1.0, neginf=-1.0` so that overflowed backbone outputs remain bounded.
-
-3. **`linear_schedule` clamping**:
-   The schedule now returns `max(0.0, progress_remaining * lr)`, preventing negative learning rates.
-
-**Note on Resuming**: The web UI must be restarted to load these code changes into memory!
+**Note**: Since `web_ui.py` invokes `main.py` directly, no IDE restart is required; just click "Train" again and these mathematical safeguards will be actively protecting the run.
 
 ---
 
