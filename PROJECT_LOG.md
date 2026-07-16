@@ -3,6 +3,25 @@
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
 ---
+## 2026-07-17 (Phase 3, Step 1) — PPO Stable Learning Fix (Linear LR Schedule)
+**Context**: After 1.5M steps of training, the model's performance abruptly collapsed. The mean return plummeted from ~-60.0 to over -800.0, and the mean invalid-action rate spiked from ~0% to ~43%. Visual inspection of the training curve showed a sharp "cliff drop" around the 1.3M-1.4M timestep mark.
+**Diagnosis**: The cause was traced to the linear learning rate schedule. SB3's `PPO.learn` method calculates `progress_remaining` as `1.0 - (num_timesteps / total_timesteps)`. Due to floating-point arithmetic and the exact timing of the final update, `num_timesteps` slightly exceeded `total_timesteps` at the end of the run. This resulted in a `progress_remaining` value < 0, which, when multiplied by the learning rate, produced a negative learning rate. This immediately caused the loss function to explode and the policy to collapse (NaN gradients).
+
+**Implementation (Hardened LR Schedule)**:
+1. Modified `train_mappo.py` to clamp `progress_remaining` to `0.0` before multiplying by the learning rate.
+2. Updated the schedule calculation in `train_mappo.py`:
+   ```python
+   def linear_schedule(initial_value: float) -> Callable[[float], float]:
+       """Linear learning rate schedule."""
+       def func(progress_remaining: float) -> float:
+           # Clamp to 0.0 to prevent negative learning rates from float precision issues
+           return max(0.0, progress_remaining * initial_value)
+       return func
+   ```
+**Expected Outcome**: The learning rate will now smoothly decay to 0.0 without ever becoming negative. The policy will continue to converge stably, avoiding the catastrophic failure mode observed at 1.4M timesteps.
+
+---
+
 
 ## 2026-07-16 (Phase 2, Step 3) — PPO Hyperparameter Tuning for Payload Optimization
 
