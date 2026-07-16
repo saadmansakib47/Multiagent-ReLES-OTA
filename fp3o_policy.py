@@ -84,84 +84,6 @@ def ecu_type_to_idx(ecu_type: str) -> int:
     return ECU_TYPE_TO_IDX.get(ecu_type, ECU_TYPE_TO_IDX["generic"])
 
 
-# ══════════════════════════════════════════════════════════════
-#  Value Normalizer (PopArt-style running stats)
-# ══════════════════════════════════════════════════════════════
-
-class ValueNormalizer(nn.Module):
-    """
-    Running mean/std normalizer for value function targets.
-
-    Based on PopArt (Hessel et al., 2019):
-      - Track μ (mean) and σ² (variance) of value targets online.
-      - During critic update: normalize targets → regress on z-scored values.
-      - During advantage estimation (GAE): denormalize V(s) predictions to
-        keep TD errors on the original reward scale.
-
-    Parameters
-    ----------
-    epsilon : float
-        Small constant for numerical stability (avoids division by zero).
-    momentum : float
-        EMA factor for updating running stats. Lower = slower adaptation.
-    clip_val : float
-        Max absolute value of normalized targets (prevents exploding gradients).
-    """
-
-    def __init__(
-        self,
-        epsilon: float  = 1e-4,
-        momentum: float = 0.01,
-        clip_val: float = 10.0,
-    ):
-        super().__init__()
-        self.epsilon  = epsilon
-        self.momentum = momentum
-        self.clip_val = clip_val
-
-        # Running statistics — registered as buffers (not learned parameters)
-        self.register_buffer("running_mean", torch.zeros(1))
-        self.register_buffer("running_var",  torch.ones(1))
-        self.register_buffer("count",        torch.zeros(1))
-
-    @property
-    def running_std(self) -> torch.Tensor:
-        return torch.sqrt(self.running_var + self.epsilon)
-
-    @torch.no_grad()
-    def update(self, targets: torch.Tensor) -> None:
-        """
-        Update running statistics with a batch of new value targets.
-        Uses Welford's online algorithm adapted for batch EMA.
-        """
-        batch_mean = targets.mean()
-        batch_var  = targets.var(unbiased=False)
-        batch_n    = torch.tensor(targets.numel(), dtype=torch.float32,
-                                  device=targets.device)
-
-        # EMA update
-        self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * batch_mean
-        self.running_var  = (1 - self.momentum) * self.running_var  + self.momentum * batch_var
-        self.count        = self.count + batch_n
-
-    def normalize(self, targets: torch.Tensor) -> torch.Tensor:
-        """
-        Normalize value targets to zero-mean, unit-variance.
-        Call update() first on each training batch.
-        """
-        normed = (targets - self.running_mean) / self.running_std
-        return normed.clamp(-self.clip_val, self.clip_val)
-
-    def denormalize(self, values: torch.Tensor) -> torch.Tensor:
-        """
-        Denormalize critic outputs back to original reward scale.
-        Call this during GAE advantage estimation.
-        """
-        return values * self.running_std + self.running_mean
-
-    def extra_repr(self) -> str:
-        return (f"momentum={self.momentum}, epsilon={self.epsilon}, "
-                f"clip_val={self.clip_val}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -416,12 +338,6 @@ class FP3OPolicy(ActorCriticPolicy):
                 self.observation_space, latent_dim=self.latent_dim, is_critic=True, algorithm=self.algorithm
             ).to(self.device)
 
-        # Value normalizer (initialized after super().__init__ sets up device)
-        self.value_normalizer = ValueNormalizer(
-            momentum = self.vn_momentum,
-            clip_val = self.vn_clip,
-        ).to(self.device)
-
         # Build mapping buffer from one-hot agent index to ecu type index
         if isinstance(observation_space, spaces.Dict) and "agent_id" in observation_space.spaces:
             n_agents = observation_space.spaces["agent_id"].shape[0]
@@ -582,14 +498,12 @@ class FP3OPolicy(ActorCriticPolicy):
 
     def predict_values(self, obs: PyTorchObs) -> torch.Tensor:
         """
-        Predict value estimates V(s) with denormalization.
+        Predict value estimates V(s).
         Called during rollout collection — returns raw-scale values.
         """
         features = self.vf_features_extractor(obs)
         latent_vf = self.mlp_extractor(features)[1]
-        # Critic head returns normalized values; denormalize to reward scale
-        normed_values = self.critic_head(latent_vf)
-        return self.value_normalizer.denormalize(normed_values)
+        return self.critic_head(latent_vf)
 
     def evaluate_actions(
         self,
@@ -597,7 +511,6 @@ class FP3OPolicy(ActorCriticPolicy):
         actions: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """
-        Override to inject value normalization into the training loop.
         Called inside PPO's learn() during gradient computation.
         Passes obs to _get_action_dist_from_latent for ECU-type routing
         and for consistent obs-derived action masking.
@@ -615,9 +528,9 @@ class FP3OPolicy(ActorCriticPolicy):
         log_prob       = distribution.log_prob(actions)
         entropy        = distribution.entropy()
 
-        # Critic: return normalized values (training regresses on normed targets)
-        values_normed = self.critic_head(latent_vf)
-        return values_normed, log_prob, entropy
+        # Critic: return values
+        values = self.critic_head(latent_vf)
+        return values, log_prob, entropy
 
     def forward(
         self,
@@ -638,9 +551,8 @@ class FP3OPolicy(ActorCriticPolicy):
         actions      = distribution.get_actions(deterministic=deterministic)
         log_prob     = distribution.log_prob(actions)
 
-        # Return denormalized values for rollout collection
-        values_normed = self.critic_head(latent_vf)
-        values        = self.value_normalizer.denormalize(values_normed)
+        # Return values for rollout collection
+        values = self.critic_head(latent_vf)
         return actions, values, log_prob
 
 

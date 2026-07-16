@@ -26,7 +26,18 @@ Once the linear weights became `NaN`, all downstream logits became `NaN`.
 2. **Added Early Stopping via Target KL (train_mappo.py)**:
    Added `target_kl = 0.05` to the `PPO` instantiation. If the KL divergence exceeds 0.05, SB3 will instantly halt the remaining epochs for that batch, completely preventing KL explosion before it can ever reach the clamp bounds.
 
-**Note**: Since `web_ui.py` invokes `main.py` directly, no IDE restart is required; just click "Train" again and these mathematical safeguards will be actively protecting the run.
+**Note**: The above mathematically prevented KL explosion in standard updates, but a new traceback revealed a `RuntimeWarning: invalid value encountered in multiply` in `stable_baselines3/common/buffers.py` prior to the crash.
+
+**Definitive Structural Cure (Replacing Custom Normalizer)**:
+
+The final missing link was the custom `ValueNormalizer` in `fp3o_policy.py`. When the environment issued a huge crash penalty (e.g., `-2000.0`), the custom normalizer (which lacked an `isfinite` check) allowed the statistical variance to explode or produce `NaN` running means. This corrupted the rollout buffer, which pushed `NaN` gradients through PPO, eventually corrupting the policy weights and crashing `MaskableCategorical`.
+
+To cure this permanently:
+1. **Removed Custom ValueNormalizer**: Completely deleted the custom scaling logic from `fp3o_policy.py`.
+2. **Integrated SB3 VecNormalize**: Wrapped the environment in `train_mappo.py` with `VecNormalize(env, norm_obs=True, norm_reward=True, clip_reward=10.0, clip_obs=10.0)`. This is the industry-standard, battle-tested way to bound rewards and observations to mathematically safe limits.
+3. **Capped Environment Penalties**: Reduced the massive `-500.0 * n_agents` crash penalty in `marl_ota_env.py` down to a hard `-100.0` to ensure raw values don't explode before reaching the normalizer.
+
+**Note**: Since `web_ui.py` invokes `main.py` directly, no IDE restart is required; just click "Train" again.
 
 ---
 

@@ -385,7 +385,8 @@ class MultiAgentOTAEnv(ParallelEnv):
                         crashed = True
             
             if crashed:
-                return -500.0 * len(self.possible_agents)
+                # Cap the maximum crash penalty to -100.0 to prevent gradient explosions
+                return -100.0
                 
             val = 0.0
             for a in S:
@@ -444,8 +445,8 @@ class MultiAgentOTAEnv(ParallelEnv):
         if crashed:
             for agent in self.possible_agents:
                 self.truncations[agent] = True
-                # Scaled-down crash penalty (was -500 per agent)
-                rewards[agent] = -50.0
+                # Scaled-down crash penalty to prevent statistical explosions
+                rewards[agent] = -20.0
                 infos[agent] = {"crash": True}
             self.agents = []
             obs = {a: self._get_obs(a) for a in self.possible_agents}

@@ -154,12 +154,11 @@ def train_algorithm(
         import supersuit as ss
         # pyrefly: ignore [import, missing-import]
         from stable_baselines3 import PPO
-        # pyrefly: ignore [import, missing-import]
-        from stable_baselines3.common.vec_env import VecMonitor
+        from stable_baselines3.common.vec_env import VecMonitor, VecNormalize
         # pyrefly: ignore [import, missing-import]
         from stable_baselines3.common.callbacks import BaseCallback, CallbackList
         # pyrefly: ignore [import, missing-import]
-        from fp3o_policy import FP3OPolicy, ValueNormalizationCallback, make_fp3o_policy_kwargs
+        from fp3o_policy import FP3OPolicy, make_fp3o_policy_kwargs
     except ImportError as e:
         print(f"  ❌  Missing dependency: {e}")
         print("  Install with:  pip install supersuit stable-baselines3 sb3-contrib")
@@ -251,6 +250,11 @@ def train_algorithm(
 
     # Dummy seed stub required by older SB3 internals.
     env.seed = lambda seed=None: None
+    
+    # Apply native SB3 Normalization BEFORE VecMonitor
+    # This automatically bounds observations and rewards to safe ranges ([-10, 10]).
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_reward=10.0, clip_obs=10.0)
+    
     env = VecMonitor(env)
 
     # ── PPO model ──
@@ -306,7 +310,6 @@ def train_algorithm(
     print(f"\n  Starting {algorithm.upper()} training on {selected_device}...")
     t0 = time.time()
     callback = CallbackList([
-        ValueNormalizationCallback(),
         InvalidActionRateCallback(),
     ])
     model.learn(total_timesteps=total_timesteps, progress_bar=True, callback=callback)
