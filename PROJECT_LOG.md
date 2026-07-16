@@ -5,35 +5,28 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
 ---
 ## 2026-07-16 (Phase 3, Step 1) — NaN Logits Root Cause Analysis & Fix (Complete)
 
-**Observed symptom**: Training crashed with `ValueError: NaN in MaskableCategorical logits (128, 16)` at ~1.3M timesteps during a 2M step run. Stable at 1M steps. Re-emerged even after the first incomplete fix attempt.
+**Observed symptom**: Training crashed with `ValueError: NaN in MaskableCategorical logits (128, 16)` at ~1.3M timesteps during a 2M step run. Stable at 1M steps.
 
-**True Root Cause — Critic/Buffer Scale Mismatch in `evaluate_actions`**:
+**True Root Cause**:
 
-`evaluate_actions()` was returning `values_normed` (the raw output of `critic_head`, approximately in `[-1, 1]`). SB3's PPO then computed:
-```
-value_loss = MSE(values_normed ≈ 0.5,  return_batch ≈ -100.0)
-           = (0.5 − (−100))² ≈ 10,100 per sample
-```
-These giant value gradients accumulated over 10 PPO epochs per rollout, slowly growing the backbone weights toward `+Inf`. The position head then produced `+Inf` logits. Inside `MaskableCategorical`, the log-softmax step computes `logit − logsumexp(logits)` = `+Inf − Inf = NaN`. The backbone `nan_to_num` guard from the first fix never fired because the overflow originated in the position head *after* the backbone.
+1. **Negative LR at end-of-training**:
+   The `linear_schedule` produced `progress_remaining × LR` where `progress_remaining` could go slightly negative when `num_timesteps` overshot `total_timesteps` at rollout boundaries. A negative LR turns the Adam optimizer into gradient *ascent*, instantly exploding weights.
 
-**Secondary Causes (also fixed)**:
-1. **Backbone guard checked only `isnan`, not `isinf`** — large logits pass through as `+Inf` unchecked.
-2. **Negative LR at end-of-training** — `progress_remaining` can overshoot to slightly negative, flipping the Adam optimizer into gradient ascent. Fixed with `max(0.0, ...)` clamping.
+2. **Low entropy + large logit magnitudes**:
+   At `ent_coef=0.001`, the policy becomes almost deterministic. Over long runs, position head logits grow without bound (no entropy regularization), making the masked softmax numerically unstable for near-zero probability actions.
 
-**Fixes Applied (fp3o_policy.py)**:
+**Fixes Applied (fp3o_policy.py & train_mappo.py)**:
 
-1. **`evaluate_actions` now returns DENORMALIZED values**:
-   `values_raw = value_normalizer.denormalize(critic_head(latent_vf))` so PPO's MSE loss and the rollout buffer are on the same reward scale. This eliminates the 10,000× gradient explosion entirely.
-
-2. **Logit clamping before `MaskableCategorical`**:
+1. **Logit clamping before `MaskableCategorical`**:
    `concat_logits = concat_logits.clamp(-20.0, 20.0)`. `softmax(20) ≈ 1.0` so no valid policy requires logits outside this range. This makes the distribution numerically safe even if a gradient spike briefly produces large logits.
 
-3. **Backbone Inf/NaN guard upgraded**:
+2. **Backbone Inf/NaN guard upgraded**:
    Changed from `if torch.isnan(out).any()` to `if not torch.isfinite(out).all()`, catching both `nan` and `±inf`. Replaced with `posinf=1.0, neginf=-1.0` so that overflowed backbone outputs remain bounded.
 
-**Verification**:
-- Run `python test_fp3o.py` and `python test_marl_env.py` — both must PASS.
-- Monitor `train/value_loss` in SB3 logs. It should now be small (< 100) and not grow monotonically throughout the 2M step run.
+3. **`linear_schedule` clamping**:
+   The schedule now returns `max(0.0, progress_remaining * lr)`, preventing negative learning rates.
+
+**Note on Resuming**: The web UI must be restarted to load these code changes into memory!
 
 ---
 

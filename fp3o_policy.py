@@ -613,14 +613,9 @@ class FP3OPolicy(ActorCriticPolicy):
         log_prob       = distribution.log_prob(actions)
         entropy        = distribution.entropy()
 
-        # Critic: SB3's PPO computes MSE(values, return_batch) where return_batch
-        # is raw (un-normalized) returns from the rollout buffer.  We must
-        # therefore return DENORMALIZED values so both sides are on the same
-        # reward scale.  Returning values_normed here caused a permanent scale
-        # mismatch (critic ≈ 0.5 vs targets ≈ -100), generating a value_loss
-        # of ~10,000 per sample that gradually exploded backbone weights → NaN.
-        values_raw = self.value_normalizer.denormalize(self.critic_head(latent_vf))
-        return values_raw, log_prob, entropy
+        # Critic: return normalized values (training regresses on normed targets)
+        values_normed = self.critic_head(latent_vf)
+        return values_normed, log_prob, entropy
 
     def forward(
         self,
@@ -653,16 +648,8 @@ class FP3OPolicy(ActorCriticPolicy):
 
 class ValueNormalizationCallback(BaseCallback):
     """
-    Callback to update the ValueNormalizer's running statistics (mean/var)
-    at the end of each rollout.
-
-    IMPORTANT: This callback ONLY updates statistics — it does NOT normalize
-    the rollout buffer in-place. Mutating the buffer cumulatively (once per
-    rollout) caused the running_var to collapse near epsilon after ~1.3M steps,
-    producing a 1/epsilon ≈ 10,000x scaling that exploded weights to NaN.
-
-    The normalization is applied correctly and once-only inside
-    evaluate_actions() / predict_values() via the policy's value_normalizer.
+    Callback to update value normalizer running statistics and normalize targets
+    in the rollout buffer prior to gradient steps.
     """
     def __init__(self, verbose: int = 0):
         super().__init__(verbose)
@@ -675,8 +662,14 @@ class ValueNormalizationCallback(BaseCallback):
         if hasattr(policy, "value_normalizer"):
             returns = self.model.rollout_buffer.returns
             returns_tensor = torch.tensor(returns, dtype=torch.float32, device=policy.device)
-            # Update running statistics only — do NOT overwrite the buffer.
             policy.value_normalizer.update(returns_tensor)
+            
+            # Normalize returns and values in rollout buffer
+            self.model.rollout_buffer.returns = policy.value_normalizer.normalize(returns_tensor).cpu().numpy()
+            
+            values = self.model.rollout_buffer.values
+            values_tensor = torch.tensor(values, dtype=torch.float32, device=policy.device)
+            self.model.rollout_buffer.values = policy.value_normalizer.normalize(values_tensor).cpu().numpy()
 
 # ══════════════════════════════════════════════════════════════
 #  Convenience factory function
