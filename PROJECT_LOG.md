@@ -40,7 +40,19 @@ To cure this permanently:
 **Note**: Since `web_ui.py` invokes `main.py` directly, no IDE restart is required; just click "Train" again.
 
 ---
+## 2026-07-17 (Phase 3, Step 2) — 2M Timesteps Training Success
 
+**Context**: Following the structural removal of the custom `ValueNormalizer` and integration of SB3's `VecNormalize`, a full 2-seed training run was launched for 2M timesteps.
+
+**Results**:
+- **Mean Return**: 11.44 (CI: 1.21) — The agent achieved a POSITIVE return!
+- **Shield Rate**: 0.0 — The policy learned to perfectly avoid memory violations on its own.
+- **Mean Payload Cost**: 39,250.4
+- **Stability**: Both seeds successfully completed 2M steps without any `NaN` explosions or crashes. The mathematical safeguards held perfectly.
+
+**Conclusion**: The core FP3O architecture is now mathematically robust and highly performant in the Multi-Agent OTA Environment.
+
+---
 
 
 

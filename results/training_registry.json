@@ -250,5 +250,22 @@
     "mean_payload_cost": 90640.9,
     "shield_rate": 0.0,
     "eval_episodes": 20
+  },
+  {
+    "run_id": 16,
+    "timestamp": "2026-07-16T17:04:19.883317+00:00",
+    "algorithm": "FP3O",
+    "safety": true,
+    "n_seeds": 2,
+    "timesteps_per_seed": 2000897,
+    "total_env_steps": 4001794,
+    "mean_return": 11.4401,
+    "ci_95": 1.215,
+    "p_value_vs_ippo": "N/A",
+    "n_agents": 4,
+    "n_blocks": 16,
+    "mean_payload_cost": 39250.4,
+    "shield_rate": 0.0,
+    "eval_episodes": 20
   }
 ]
