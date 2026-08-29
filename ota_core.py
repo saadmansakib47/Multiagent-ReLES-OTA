@@ -10,6 +10,7 @@ update economics, making single-vs-multi comparisons scientifically valid.
 """
 
 import numpy as np
+# pyrefly: ignore [missing-import]
 from scipy.stats import truncnorm
 
 
