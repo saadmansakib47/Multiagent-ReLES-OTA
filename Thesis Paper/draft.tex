@@ -142,6 +142,51 @@ operation costs, avoiding the bias of a naive equal-split.
 
 \section{Environment and Methodology}
 
+\subsection{Problem Formulation}
+We model the fleet as a cooperative partially observable decision process. At time
+$t$, ECU agent $i$ observes a local state $o_i^t$ containing its firmware backlog,
+available operations, memory state, channel-related quantities, and a semantic type
+vector $t_i$. Each agent selects an action $a_i^t$ from the masked set of valid
+firmware-block/operation pairs. The joint action is
+$\mathbf{a}^t=(a_1^t,\ldots,a_N^t)$, and the environment returns a shared fleet
+objective together with per-agent credit assignments. For type-conditioned IPPO, the
+actor can be written as
+\[
+a_i^t \sim \pi_\theta(\,\cdot \mid o_i^t,t_i),
+\]
+where the same parameters $\theta$ are used by every agent. FP3O instead introduces
+type-specific policy components on top of a shared representation. The central
+question is therefore whether the semantic variable $t_i$ provides enough
+information for one shared policy to represent different role-dependent actions
+without explicit parameter specialization.
+
+The policy seeks to maximize the expected discounted return
+\[
+J(\theta)=\mathbb{E}_{\pi_\theta}\left[\sum_{t=0}^{T-1}\gamma^t r_t\right],
+\]
+where the reward reflects the modeled update cost, stochastic transmission cost, and
+memory overhead, while the Shapley-based allocation assigns the resulting team
+contribution to individual agents. The safety shield separately enforces the
+modeled fleet-memory constraint. This separation lets us study the architectural
+question without conflating cooperative optimization with constraint enforcement.
+
+\subsection{Observation, Action, and Reward Design}
+Each agent's observation contains its local firmware state and the variables needed
+to estimate the consequence of a candidate update operation. The action space is the
+choice of a firmware block and one of the supported operations (Copy, Modify, or
+Multi-Base), with invalid block/operation combinations masked before policy
+sampling. The environment's reward combines the modeled encoding/transmission cost
+and memory overhead. Type-specific operation multipliers modify these costs in S3/S4,
+so the same operation can be preferable for one ECU type and undesirable for another.
+This creates a controlled setting in which explicit specialization has a plausible
+advantage, making a competitive shared policy a meaningful result rather than a
+consequence of identical per-type objectives.
+
+The reward should therefore be interpreted as a simulated scheduling objective rather
+than a direct measure of road safety. Safety is handled separately by the action
+shield, which prevents the policy from violating the modeled fleet-memory budget
+during exploration.
+
 \subsection{Single-Agent Baseline}
 We reproduce the ReLES-OTA~\cite{b1} cost model in a single-agent
 Gymnasium~\cite{b8} environment. At each step an agent selects a firmware block and an
@@ -162,6 +207,12 @@ tensor shapes constant for the centralized critic following the convention in~\c
 \textit{Safety shield}: a rule-based filter intercepts every proposed joint action and
 blocks any action that would push cumulative fleet memory above 85\,\% of budget,
 guaranteeing safety independent of policy quality during high-variance early exploration.
+
+
+Here, ``safety'' refers specifically to the fleet-memory constraint represented by
+the simulator. The shield therefore provides a hard guarantee with respect to that
+modeled constraint, rather than a guarantee of physical vehicle safety in a real
+vehicle.
 
 \textit{Monte Carlo Shapley credit}: each agent's per-step reward is its approximate
 Shapley value~\cite{b18}, computed by averaging marginal contributions across random
@@ -237,6 +288,22 @@ Generic      & 1.0 & 1.0 & 1.0 \\
 \label{tab:multipliers}
 \end{center}
 \end{table}
+
+\subsection{Evaluation Protocol}
+All headline S4 comparisons use the same environment, training horizon, safety
+constraint, and evaluation procedure. Five independent random seeds are used for
+each algorithm, and the individual seed results are retained rather than reporting
+only an aggregate mean. The reported confidence interval is the 95\,\% interval
+computed across seed-level returns. Because $n=5$ is small, the inferential
+statistics are treated as directional evidence rather than definitive evidence of
+superiority. In particular, we do not describe a comparison as statistically
+significant when its reported Welch test does not reach $p<0.05$.
+
+The FP3O collapsed seed is retained in all aggregates rather than being removed as
+an outlier. This is important because the run-to-run instability is itself an
+observation of the experiment. All algorithms are evaluated under the same
+zero-violation safety constraint, so return differences should not be interpreted
+as differences in safety violations.
 
 \section{Results}
 
@@ -347,6 +414,28 @@ episode than IPPO or MAPPO. All algorithms hold the safety-shield activation rat
 \label{fig:payload}
 \end{figure}
 
+\subsection{Interpretation of Type Conditioning}
+The S3-to-S4 transition changes the interpretation of the comparison. In S3, the
+one-hot agent index is correlated with the fixed ECU-type assignment. A shared
+policy can therefore produce different outputs for different physical agents
+without changing its parameters. This retains the experience-pooling advantage of
+parameter sharing, but it also gives the policy an opportunity to memorize physical
+identity. S4 removes this identity information and supplies the semantic ECU-type
+vector instead.
+
+The type-conditioned policy can therefore specialize by functional role while
+continuing to share all policy parameters and experience. The present result supports
+the narrower claim that explicit per-type policy heads are not necessary for the
+tested four-agent heterogeneous OTA environment. It does not establish universal
+superiority of IPPO, nor does it establish transfer to larger fleets or unseen type
+compositions. Those are separate empirical questions.
+
+A useful interpretation is that FP3O implements specialization through parameters,
+whereas type-conditioned IPPO implements specialization through input context. The
+current experiments show that, under the studied cost conflict, the latter can be
+sufficient. Determining the boundary at which increasing heterogeneity makes explicit
+specialization preferable is a natural follow-up study.
+
 \section{Discussion and Limitations}
 
 The staged experimental design separates the confound-driven advantage from the
@@ -387,6 +476,11 @@ the approach on real vehicle telemetry and larger, more diverse ECU fleets.
 The environment, training code, per-seed result files, and TensorBoard training logs
 underlying this paper are publicly available at
 \url{https://github.com/saadmansakib47/Multiagent-ReLES-OTA}.
+The repository also preserves the configurations and raw seed-level results used
+for the headline comparison, allowing the aggregate statistics to be independently
+recomputed. The five-seed setting reflects the computational constraints of the
+current study; larger seed counts and broader fleet configurations are reserved for
+follow-up evaluation.
 
 \section*{Acknowledgment}
 The authors thank the Department of Computer Science and Engineering, IUT, for
