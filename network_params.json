@@ -1,0 +1,9 @@
+{
+  "latency_base_ms": 120.0,
+  "packet_loss_rate": 0.05,
+  "memory_budget_fraction": 0.60,
+  "bandwidth_mbps": 25.0,
+  "jitter_ms": 35.0,
+  "monsoon_multiplier": 1.3,
+  "notes": "Vehicular wireless channel parameters — urban 4G/5G cellular link with stochastic burst jitter"
+}

@@ -136,10 +136,13 @@ _DEFAULT_PARAMS = {
 }
 
 
-def load_bd_params(path: str = "bd_params.json") -> dict:
-    """Load BD network parameters, falling back to generic defaults."""
+def load_network_params(path: str = "network_params.json") -> dict:
+    """Load vehicular network channel parameters, falling back to defaults."""
     params = dict(_DEFAULT_PARAMS)
     p = Path(path)
+    if not p.exists() and path == "network_params.json":
+        # Fallback to legacy bd_params.json if present
+        p = Path("bd_params.json")
     if p.exists():
         try:
             with open(p, "r") as f:
@@ -147,3 +150,9 @@ def load_bd_params(path: str = "bd_params.json") -> dict:
         except Exception:
             pass
     return params
+
+
+def load_bd_params(path: str = "network_params.json") -> dict:
+    """Backward-compatible alias for load_network_params."""
+    return load_network_params(path)
+

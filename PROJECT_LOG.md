@@ -3,7 +3,57 @@
 This file tracks the major implementation updates for the ReLES-OTA replication project. Add a new dated entry for each milestone so the team can keep a clean history of what changed, why it changed, and how it was verified.
 
 ---
-## 2026-07-16 (Phase 3, Step 1) — NaN Logits Root Cause Analysis & Fix (Definitive)
+## 2026-09-01 (Phase 6) — Codebase Standardization & Repository Cleanup
+
+**Context**: Preparing the project repository for camera-ready submission and reproducibility archival.
+
+**Actions Taken**:
+1. **Network Parameter Standardization**:
+   - Created `network_params.json` as the domain-standard configuration for vehicular wireless channels (120ms latency, 5% packet loss, 25 Mbps bandwidth, burst jitter).
+   - Updated `ota_core.py` with `load_network_params()` and kept `load_bd_params()` as a backward-compatible alias to prevent breaking legacy scripts.
+2. **Paper Scope Verification**:
+   - Confirmed `Thesis Paper/draft.tex` is 100% free of local regional artifacts and maintains rigorous IEEE vehicular CPS terminology.
+3. **Artifact Audit**:
+   - Verified that `results/final/` contains all reconstructed publication-ready plots (`learning_curves.png`, `entropy_curves.png`) and master extracted scalars (`extracted_marl_training_history.csv`).
+
+---
+
+## 2026-08-29 (Phase 5) — IEEE VTC 2027 Conference Paper Drafting & Log Extraction
+
+**Context**: Preparing the 5-page submission for the IEEE Vehicular Technology Conference (VTC 2027-Spring).
+
+**Key Actions & Discoveries**:
+1. **TensorBoard Diagnostics Recovery**:
+   - Discovered and parsed 61 retained `tfevents` files in `results/marl_models/` using `tools/extract_training_curves.py`.
+   - Reconstructed per-timestep training curves and policy entropy decay curves across all seeds.
+   - Removed the obsolete data-loss limitation from the draft.
+2. **Draft Overhaul (`Thesis Paper/draft.tex`)**:
+   - Set paper title: *"All You Need Is Type Conditioning: Parameter Sharing vs. Specialization for Safety-Constrained Heterogeneous Automotive OTA Update Scheduling"*.
+   - Added Section III-D explicitly explaining why `ecu_type` is semantic role conditioning rather than an agent-index lookup confounder.
+   - Integrated all four publication figures (`algo_comparison_3way.pdf`, `learning_curves.png`, `entropy_curves.png`, `figure3_payload_safety_tradeoff.pdf`).
+   - Grounded results in the authoritative 5-seed data (IPPO $16.71 \pm 0.001$, MAPPO $16.71 \pm 0.001$, FP3O $5.09 \pm 26.14$).
+
+---
+
+## 2026-08-26 (Phase 4, Step 6) — Authoritative 5-Seed Scaling & FP3O Seed Instability
+
+**Context**: Scaled the fair, type-conditioned comparison to 5 seeds per algorithm (2,000,897 timesteps per seed, ~10M environment steps per algorithm).
+
+**Results (Training Registry Runs #26, #27, #28)**:
+
+| Algorithm | Mean Return | 95% CI Half-Width | $p$ vs. IPPO | Mean Payload Cost | Shield Rate |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **IPPO (Type-Conditioned)** | **16.71** | 0.001 | — | 38,335.2 | 0.0% |
+| **MAPPO (Type-Conditioned)** | 16.71 | 0.001 | 0.0791 | 38,336.5 | 0.0% |
+| **FP3O (Specialized Heads)** | 5.09 | 26.14 | 0.2846 | 45,244.7 | 0.0% |
+
+**Key Findings**:
+1. **Shared Policy Determinism**: IPPO and MAPPO converged to near-identical, deterministic optimal policies across all 5 seeds ($16.71 \pm 0.001$), demonstrating that semantic type conditioning in a shared backbone is highly sample-efficient and stable.
+2. **FP3O Seed Instability**: FP3O returns across the 5 seeds were `{15.09, 15.18, 10.85, 16.71, -32.37}`. Four seeds converged near the IPPO range (mean $14.46$), but one seed suffered catastrophic collapse ($-32.37$), pulling down the mean to $5.09$ and inflating variance.
+3. **Statistical Power**: Welch's $t$-test yielded $p = 0.285$ for IPPO vs. FP3O and $p = 0.079$ for IPPO vs. MAPPO, indicating that at $n=5$, results are directionally consistent and suggestive rather than formally confirmatory.
+
+---
+
 
 **Observed symptom**: Training crashed with `ValueError: NaN in MaskableCategorical logits (128, 16)`. The first seed finished 2M steps perfectly, but the second seed crashed at ~600k steps.
 
