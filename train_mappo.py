@@ -136,6 +136,7 @@ def train_algorithm(
     ent_coef: float      = 0.01,
     device: str          = "auto",
     death_masking: bool  = True,
+    type_conditioning: bool = True,
     seed: int            = 42,
 ) -> None:
     """
@@ -216,7 +217,8 @@ def train_algorithm(
         return MultiAgentOTAEnv(
             n_agents=n_agents, n_blocks=n_blocks,
             bd_mode=bd_mode, stochastic_latency=bd_mode,
-            safety_shield=safety
+            safety_shield=safety,
+            type_conditioning=type_conditioning,
         )
 
     raw_env = make_env()
@@ -354,6 +356,8 @@ def main():
     parser.add_argument("--device",     choices=["auto", "cpu", "cuda"], default="auto", help="Training device")
     parser.add_argument("--death_masking", type=lambda x: str(x).lower() == 'true', default=True,
                         help="Keep finished agents masked with zero observations")
+    parser.add_argument("--type_conditioning", type=lambda x: str(x).lower() == 'true', default=True,
+                        help="Enable semantic ECU type conditioning (False = blind/type-ablated)")
     parser.add_argument("--episodes",   type=int, default=20,      help="Episodes for random baseline")
     args = parser.parse_args()
 
@@ -362,7 +366,7 @@ def main():
     print("╚" + "═" * 55 + "╝")
     print(f"  Mode: {args.mode.upper()}")
     print(f"  Algorithm: {args.algorithm.upper()}")
-    print(f"  Agents: {args.n_agents} | Blocks/agent: {args.n_blocks} | BD mode: {args.bd_mode} | Safety: {args.safety}")
+    print(f"  Agents: {args.n_agents} | Blocks/agent: {args.n_blocks} | BD mode: {args.bd_mode} | Safety: {args.safety} | TypeCond: {args.type_conditioning}")
 
     if args.mode == "random":
         results = run_random_marl(
@@ -379,17 +383,18 @@ def main():
 
     elif args.mode == "train":
         train_algorithm(
-            algorithm       = args.algorithm,
-            n_agents        = args.n_agents,
-            n_blocks        = args.n_blocks,
-            bd_mode         = args.bd_mode,
-            safety          = args.safety,
-            total_timesteps = args.timesteps,
-            n_envs          = args.n_envs,
-            n_steps         = args.n_steps,
-            batch_size      = args.batch_size,
-            device          = args.device,
-            death_masking   = args.death_masking,
+            algorithm         = args.algorithm,
+            n_agents          = args.n_agents,
+            n_blocks          = args.n_blocks,
+            bd_mode           = args.bd_mode,
+            safety            = args.safety,
+            total_timesteps   = args.timesteps,
+            n_envs            = args.n_envs,
+            n_steps           = args.n_steps,
+            batch_size        = args.batch_size,
+            device            = args.device,
+            death_masking     = args.death_masking,
+            type_conditioning = args.type_conditioning,
         )
 
 

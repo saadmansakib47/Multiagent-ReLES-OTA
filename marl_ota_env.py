@@ -103,10 +103,12 @@ class MultiAgentOTAEnv(ParallelEnv):
         render_mode: Optional[str] = None,
         ecu_types: Optional[Dict[str, str]] = None,
         safety_shield: bool = True,
+        type_conditioning: bool = True,
     ):
         super().__init__()
 
         self.safety_shield      = safety_shield
+        self.type_conditioning  = type_conditioning
         self.render_mode        = render_mode
         self.n_agents_total     = n_agents
         self.n_blocks           = n_blocks
@@ -268,11 +270,12 @@ class MultiAgentOTAEnv(ParallelEnv):
         2. The critic can still identify which agents are "dead" via the
            zero-pattern, and learn to predict the post-death average reward.
         """
-        # One-hot ECU type identity vector (always present)
-        ecu_type = self.ecu_types.get(agent, "generic")
-        ecu_idx  = self.ecu_types_list.index(ecu_type)
+        # One-hot ECU type identity vector (active when type_conditioning=True; all zeros in blind mode)
         ecu_type_vec = np.zeros(4, dtype=np.float32)
-        ecu_type_vec[ecu_idx] = 1.0
+        if self.type_conditioning:
+            ecu_type = self.ecu_types.get(agent, "generic")
+            ecu_idx  = self.ecu_types_list.index(ecu_type)
+            ecu_type_vec[ecu_idx] = 1.0
         
         state = self._get_global_state()
 

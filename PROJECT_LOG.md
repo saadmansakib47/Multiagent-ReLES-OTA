@@ -15,6 +15,12 @@ This file tracks the major implementation updates for the ReLES-OTA replication 
    - Confirmed `Thesis Paper/draft.tex` is 100% free of local regional artifacts and maintains rigorous IEEE vehicular CPS terminology.
 3. **Artifact Audit**:
    - Verified that `results/final/` contains all reconstructed publication-ready plots (`learning_curves.png`, `entropy_curves.png`) and master extracted scalars (`extracted_marl_training_history.csv`).
+4. **Type-Conditioning Ablation Switch & Web UI Component**:
+   - Implemented `type_conditioning: bool = True` in `marl_ota_env.py` and `--type_conditioning` across `train_mappo.py`, `main.py`, and `tools/evaluate_marl.py`.
+   - When enabled (`True`), observations include the 4-dim semantic ECU-type one-hot vector (`[1,0,0,0]` etc.).
+   - When disabled (`False` - Blind Mode), observations pass `[0,0,0,0]`, preserving tensor shapes and network architecture while blinding the policy to ECU types for controlled ablation studies.
+   - Added the **Type Conditioning** checkbox switch to `webui/index.html`, connected through `webui/app.js` and `web_ui.py` for 1-click execution.
+   - Blind runs are automatically tracked under `IPPO_Blind_Safety_True` to keep primary benchmark runs pristine.
 
 ---
 

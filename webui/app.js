@@ -42,6 +42,7 @@ function readPayload() {
     safety: field("safety").checked,
     bd_mode: field("bd_mode").checked,
     death_masking: field("death_masking").checked,
+    type_conditioning: field("type_conditioning").checked,
   };
 }
 

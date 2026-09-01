@@ -83,6 +83,7 @@ def evaluate_trained_model(
     n_eval_episodes: int  = 20,
     safety: bool          = True,
     bd_mode: bool         = True,
+    type_conditioning: bool = True,
     verbose: bool         = False,
 ) -> dict:
     """
@@ -106,6 +107,7 @@ def evaluate_trained_model(
     n_eval_episodes : number of independent test episodes (default: 20)
     safety          : whether the CBF safety shield was enabled during training
     bd_mode         : use Bangladesh network conditions for test env (default: True)
+    type_conditioning: enable semantic ECU type conditioning (False = blind)
     verbose         : print per-episode stats
 
     Returns
@@ -135,6 +137,7 @@ def evaluate_trained_model(
         bd_mode           = bd_mode,
         stochastic_latency= True,   # keep realistic stochastic conditions
         safety_shield     = safety,
+        type_conditioning = type_conditioning,
     )
 
     episode_returns:       list[float] = []
@@ -224,6 +227,7 @@ def evaluate_all_seeds(
     n_eval_episodes: int  = 20,
     safety: bool          = True,
     bd_mode: bool         = True,
+    type_conditioning: bool = True,
     verbose: bool         = True,
 ) -> dict:
     """
@@ -261,14 +265,15 @@ def evaluate_all_seeds(
     for seed_dir in seed_dirs:
         try:
             res = evaluate_trained_model(
-                seed_dir        = str(seed_dir),
-                algorithm       = algorithm,
-                n_agents        = n_agents,
-                n_blocks        = n_blocks,
-                n_eval_episodes = n_eval_episodes,
-                safety          = safety,
-                bd_mode         = bd_mode,
-                verbose         = verbose,
+                seed_dir          = str(seed_dir),
+                algorithm         = algorithm,
+                n_agents          = n_agents,
+                n_blocks          = n_blocks,
+                n_eval_episodes   = n_eval_episodes,
+                safety            = safety,
+                bd_mode           = bd_mode,
+                type_conditioning = type_conditioning,
+                verbose           = verbose,
             )
             per_seed_results.append(res)
             all_returns.append(res["mean_return"])
@@ -298,16 +303,18 @@ if __name__ == "__main__":
     parser.add_argument("--n_blocks",    type=int, default=16)
     parser.add_argument("--episodes",    type=int, default=20)
     parser.add_argument("--safety",      type=lambda x: x.lower() == "true", default=True)
+    parser.add_argument("--type_conditioning", type=lambda x: x.lower() == "true", default=True)
     args = parser.parse_args()
 
     result = evaluate_trained_model(
-        seed_dir        = args.seed_dir,
-        algorithm       = args.algorithm,
-        n_agents        = args.n_agents,
-        n_blocks        = args.n_blocks,
-        n_eval_episodes = args.episodes,
-        safety          = args.safety,
-        verbose         = True,
+        seed_dir          = args.seed_dir,
+        algorithm         = args.algorithm,
+        n_agents          = args.n_agents,
+        n_blocks          = args.n_blocks,
+        n_eval_episodes   = args.episodes,
+        safety            = args.safety,
+        type_conditioning = args.type_conditioning,
+        verbose           = True,
     )
     print("\n── Evaluation Result ──")
     for k, v in result.items():

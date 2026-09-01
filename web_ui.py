@@ -224,6 +224,8 @@ def build_command(payload: dict) -> list[str]:
         bool_arg(payload.get("bd_mode", True)),
         "--death_masking",
         bool_arg(payload.get("death_masking", True)),
+        "--type_conditioning",
+        bool_arg(payload.get("type_conditioning", True)),
     ]
     if compare and compare != algorithm:
         command.extend(["--compare_algorithm", compare])

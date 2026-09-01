@@ -95,6 +95,7 @@ def main():
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto", help="Training device")
     parser.add_argument("--bd_mode", type=lambda x: str(x).lower() == "true", default=True, help="Enable constrained BD network")
     parser.add_argument("--death_masking", type=lambda x: str(x).lower() == "true", default=True, help="Enable death masking")
+    parser.add_argument("--type_conditioning", type=lambda x: str(x).lower() == "true", default=True, help="Enable semantic ECU type conditioning (False = blind/type-ablated)")
     parser.add_argument("--compare_algorithm", type=str, default="", help="Compare results against this algorithm")
     args = parser.parse_args()
 
@@ -104,6 +105,7 @@ def main():
     print(f"  Mode:       {args.mode.upper()}")
     print(f"  Algorithm:  {args.algorithm.upper()}")
     print(f"  Safety:     {args.safety}")
+    print(f"  TypeCond:   {args.type_conditioning}")
     print(f"  Seeds:      {args.seeds}")
     print(f"  Agents:     {args.n_agents} | Blocks: {args.n_blocks}")
     if args.mode == "train":
@@ -119,7 +121,8 @@ def main():
     results_dir.mkdir(parents=True, exist_ok=True)
     raw_results_file  = results_dir / "raw_seed_returns.json"
     leaderboard_path  = results_dir / "leaderboard.csv"
-    entry_name        = f"{args.algorithm.upper()}_Safety_{args.safety}"
+    type_suffix       = "" if args.type_conditioning else "_Blind"
+    entry_name        = f"{args.algorithm.upper()}{type_suffix}_Safety_{args.safety}"
     experiment_dir    = results_dir / "marl_models" / entry_name
 
     # ── Load existing raw returns so p-value comparisons stay intact ─────────
@@ -143,21 +146,22 @@ def main():
             # ── Train ───────────────────────────────────────────────────────
             t0 = time.time()
             train_mean_return = train_algorithm(
-                algorithm       = args.algorithm,
-                n_agents        = args.n_agents,
-                n_blocks        = args.n_blocks,
-                bd_mode         = args.bd_mode,
-                safety          = args.safety,
-                total_timesteps = args.timesteps,
-                save_dir        = seed_dir,
-                n_envs          = args.n_envs,
-                n_steps         = args.n_steps,
-                batch_size      = args.batch_size,
-                n_epochs        = args.n_epochs,
-                ent_coef        = args.ent_coef,
-                device          = args.device,
-                death_masking   = args.death_masking,
-                seed            = seed,
+                algorithm         = args.algorithm,
+                n_agents          = args.n_agents,
+                n_blocks          = args.n_blocks,
+                bd_mode           = args.bd_mode,
+                safety            = args.safety,
+                total_timesteps   = args.timesteps,
+                save_dir          = seed_dir,
+                n_envs            = args.n_envs,
+                n_steps           = args.n_steps,
+                batch_size        = args.batch_size,
+                n_epochs          = args.n_epochs,
+                ent_coef          = args.ent_coef,
+                device            = args.device,
+                death_masking     = args.death_masking,
+                type_conditioning = args.type_conditioning,
+                seed              = seed,
             )
             elapsed = time.time() - t0
             print(f"[Seed {seed + 1}/{args.seeds}] Training completed in {elapsed:.1f}s")
@@ -169,14 +173,15 @@ def main():
             # The critic is not used at test time — only the actor policies.
             print(f"[Seed {seed + 1}/{args.seeds}] Running {args.eval_episodes}-episode evaluation...")
             eval_result = evaluate_trained_model(
-                seed_dir        = seed_dir,
-                algorithm       = args.algorithm,
-                n_agents        = args.n_agents,
-                n_blocks        = args.n_blocks,
-                n_eval_episodes = args.eval_episodes,
-                safety          = args.safety,
-                bd_mode         = args.bd_mode,
-                verbose         = True,
+                seed_dir          = seed_dir,
+                algorithm         = args.algorithm,
+                n_agents          = args.n_agents,
+                n_blocks          = args.n_blocks,
+                n_eval_episodes   = args.eval_episodes,
+                safety            = args.safety,
+                bd_mode           = args.bd_mode,
+                type_conditioning = args.type_conditioning,
+                verbose           = True,
             )
 
             perf          = eval_result["mean_return"]
@@ -231,7 +236,7 @@ def main():
 
         # ── Log to training registry ─────────────────────────────────────────
         run_id = log_run(
-            algorithm   = args.algorithm,
+            algorithm   = f"{args.algorithm.upper()}{type_suffix}",
             safety      = args.safety,
             n_seeds     = args.seeds,
             timesteps   = args.timesteps,
@@ -244,6 +249,7 @@ def main():
                 "mean_payload_cost":  round(mean_payload, 1),
                 "shield_rate":        round(mean_shield, 4),
                 "eval_episodes":      args.eval_episodes,
+                "type_conditioning":  args.type_conditioning,
             },
         )
         print(f"\n  Run #{run_id} recorded in training registry.")
@@ -289,14 +295,15 @@ def main():
 
         try:
             all_eval = evaluate_all_seeds(
-                experiment_dir  = str(experiment_dir),
-                algorithm       = args.algorithm,
-                n_agents        = args.n_agents,
-                n_blocks        = args.n_blocks,
-                n_eval_episodes = args.eval_episodes,
-                safety          = args.safety,
-                bd_mode         = args.bd_mode,
-                verbose         = True,
+                experiment_dir    = str(experiment_dir),
+                algorithm         = args.algorithm,
+                n_agents          = args.n_agents,
+                n_blocks          = args.n_blocks,
+                n_eval_episodes   = args.eval_episodes,
+                safety            = args.safety,
+                bd_mode           = args.bd_mode,
+                type_conditioning = args.type_conditioning,
+                verbose           = True,
             )
         except Exception as e:
             print(f"  ❌  Evaluation failed: {e}")
