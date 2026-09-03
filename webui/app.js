@@ -249,6 +249,18 @@ function renderState(state) {
 
 form.addEventListener("input", updateRecommendation);
 
+const coupledChannelInput = field("coupled_channel");
+const gatewayBwGroup = document.querySelector("#gatewayBwGroup");
+function syncGatewayBwVisibility() {
+  if (coupledChannelInput && gatewayBwGroup) {
+    gatewayBwGroup.style.display = coupledChannelInput.checked ? "grid" : "none";
+  }
+}
+if (coupledChannelInput) {
+  coupledChannelInput.addEventListener("change", syncGatewayBwVisibility);
+  syncGatewayBwVisibility();
+}
+
 copyOutputBtn.addEventListener("click", copyLastOutputLines);
 
 charts.addEventListener("click", (event) => {

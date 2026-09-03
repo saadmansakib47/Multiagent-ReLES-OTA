@@ -124,6 +124,17 @@
               <input name="type_conditioning" type="checkbox" checked>
               <span>Type Conditioning</span>
             </label>
+            <label title="Enables shared gateway bandwidth contention. All ECUs compete for a single finite downlink channel. Forces temporal coordination and exposes IPPO's non-stationarity weakness vs FP3O's coordinated scheduling.">
+              <input name="coupled_channel" id="coupled_channel" type="checkbox">
+              <span>Coupled Channel</span>
+            </label>
+          </div>
+
+          <div class="two" id="gatewayBwGroup" style="display: none; margin-top: 10px;">
+            <label title="Total gateway downlink bandwidth (Mbps) shared by all ECUs when coupled channel is enabled.">
+              Gateway BW (Mbps)
+              <input name="gateway_bw_mbps" type="number" min="5" max="500" step="5" value="50">
+            </label>
           </div>
 
           <div class="recommendation" id="recommendation" title="Device recommendation based on rollout product and CUDA availability."></div>
