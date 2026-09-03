@@ -37,5 +37,9 @@
   "IPPO_Blind_Coupled_Safety_True": [
     -238.2307422585081,
     -113.17044497554352
+  ],
+  "FP3O_Blind_Coupled_Safety_True": [
+    -238.71278518822987,
+    -238.18045161274443
   ]
 }
