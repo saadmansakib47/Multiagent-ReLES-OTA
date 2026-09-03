@@ -96,6 +96,8 @@ def main():
     parser.add_argument("--constrained_network_mode", type=lambda x: str(x).lower() == "true", default=True, help="Enable constrained network mode")
     parser.add_argument("--death_masking", type=lambda x: str(x).lower() == "true", default=True, help="Enable death masking")
     parser.add_argument("--type_conditioning", type=lambda x: str(x).lower() == "true", default=True, help="Enable semantic ECU type conditioning (False = blind/type-ablated)")
+    parser.add_argument("--coupled_channel", type=lambda x: str(x).lower() == "true", default=False, help="Enable shared gateway bandwidth contention (coupled channel mode)")
+    parser.add_argument("--gateway_bw_mbps", type=float, default=50.0, help="Total gateway downlink bandwidth (Mbps) in coupled mode")
     parser.add_argument("--compare_algorithm", type=str, default="", help="Compare results against this algorithm")
     args = parser.parse_args()
 
@@ -106,6 +108,7 @@ def main():
     print(f"  Algorithm:  {args.algorithm.upper()}")
     print(f"  Safety:     {args.safety}")
     print(f"  TypeCond:   {args.type_conditioning}")
+    print(f"  Coupled:    {args.coupled_channel} (Gateway: {args.gateway_bw_mbps} Mbps)")
     print(f"  Seeds:      {args.seeds}")
     print(f"  Agents:     {args.n_agents} | Blocks: {args.n_blocks}")
     if args.mode == "train":
@@ -122,7 +125,8 @@ def main():
     raw_results_file  = results_dir / "raw_seed_returns.json"
     leaderboard_path  = results_dir / "leaderboard.csv"
     type_suffix       = "" if args.type_conditioning else "_Blind"
-    entry_name        = f"{args.algorithm.upper()}{type_suffix}_Safety_{args.safety}"
+    coupled_suffix    = "_Coupled" if args.coupled_channel else ""
+    entry_name        = f"{args.algorithm.upper()}{type_suffix}{coupled_suffix}_Safety_{args.safety}"
     experiment_dir    = results_dir / "marl_models" / entry_name
 
     # ── Load existing raw returns so p-value comparisons stay intact ─────────
@@ -161,6 +165,8 @@ def main():
                 device            = args.device,
                 death_masking     = args.death_masking,
                 type_conditioning = args.type_conditioning,
+                coupled_channel   = args.coupled_channel,
+                gateway_bw_mbps   = args.gateway_bw_mbps,
                 seed              = seed,
             )
             elapsed = time.time() - t0
@@ -181,6 +187,8 @@ def main():
                 safety            = args.safety,
                 constrained_network_mode           = args.constrained_network_mode,
                 type_conditioning = args.type_conditioning,
+                coupled_channel   = args.coupled_channel,
+                gateway_bw_mbps   = args.gateway_bw_mbps,
                 verbose           = True,
             )
 
@@ -236,7 +244,7 @@ def main():
 
         # ── Log to training registry ─────────────────────────────────────────
         run_id = log_run(
-            algorithm   = f"{args.algorithm.upper()}{type_suffix}",
+            algorithm   = f"{args.algorithm.upper()}{type_suffix}{coupled_suffix}",
             safety      = args.safety,
             n_seeds     = args.seeds,
             timesteps   = args.timesteps,
@@ -250,6 +258,8 @@ def main():
                 "shield_rate":        round(mean_shield, 4),
                 "eval_episodes":      args.eval_episodes,
                 "type_conditioning":  args.type_conditioning,
+                "coupled_channel":    args.coupled_channel,
+                "gateway_bw_mbps":    args.gateway_bw_mbps,
             },
         )
         print(f"\n  Run #{run_id} recorded in training registry.")
@@ -303,6 +313,8 @@ def main():
                 safety            = args.safety,
                 constrained_network_mode           = args.constrained_network_mode,
                 type_conditioning = args.type_conditioning,
+                coupled_channel   = args.coupled_channel,
+                gateway_bw_mbps   = args.gateway_bw_mbps,
                 verbose           = True,
             )
         except Exception as e:

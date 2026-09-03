@@ -82,10 +82,15 @@ def evaluate_trained_model(
     n_blocks: int         = 16,
     n_eval_episodes: int  = 20,
     safety: bool          = True,
-    bd_mode: bool         = True,
+    constrained_network_mode: bool = True,
     type_conditioning: bool = True,
+    coupled_channel: bool = False,
+    gateway_bw_mbps: float = 50.0,
     verbose: bool         = False,
+    bd_mode: bool         = None,
 ) -> dict:
+    if bd_mode is not None:
+        constrained_network_mode = bd_mode
     """
     Run decentralized-execution evaluation of a saved MARL model.
 
@@ -134,10 +139,12 @@ def evaluate_trained_model(
     eval_env = MultiAgentOTAEnv(
         n_agents          = n_agents,
         n_blocks          = n_blocks,
-        bd_mode           = bd_mode,
+        constrained_network_mode = constrained_network_mode,
         stochastic_latency= True,   # keep realistic stochastic conditions
         safety_shield     = safety,
         type_conditioning = type_conditioning,
+        coupled_channel   = coupled_channel,
+        gateway_bw_mbps   = gateway_bw_mbps,
     )
 
     episode_returns:       list[float] = []
@@ -226,10 +233,15 @@ def evaluate_all_seeds(
     n_blocks: int         = 16,
     n_eval_episodes: int  = 20,
     safety: bool          = True,
-    bd_mode: bool         = True,
+    constrained_network_mode: bool = True,
     type_conditioning: bool = True,
+    coupled_channel: bool = False,
+    gateway_bw_mbps: float = 50.0,
     verbose: bool         = True,
+    bd_mode: bool         = None,
 ) -> dict:
+    if bd_mode is not None:
+        constrained_network_mode = bd_mode
     """
     Evaluate all seeds under an experiment directory.
 
