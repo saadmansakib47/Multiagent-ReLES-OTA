@@ -18,12 +18,12 @@ Path("results/models").mkdir(parents=True, exist_ok=True)
 Path("results/logs").mkdir(parents=True, exist_ok=True)
 
 # ====================== TRAINING FUNCTION ======================
-def train_ppo(version: str = "generic", bd_mode: bool = False):
-    print(f"\n Starting PPO Training → {version.upper()} version (BD={bd_mode})")
+def train_ppo(version: str = "generic", constrained_network_mode: bool = False):
+    print(f"\n Starting PPO Training → {version.upper()} version (BD={constrained_network_mode})")
     
     # Create vectorized environment
     def make_env():
-        return OTAEnv(n_blocks=N_BLOCKS, bd_mode=bd_mode)
+        return OTAEnv(n_blocks=N_BLOCKS, constrained_network_mode=constrained_network_mode)
     
     vec_env = make_vec_env(make_env, n_envs=N_ENVS)
     
@@ -79,7 +79,7 @@ def train_ppo(version: str = "generic", bd_mode: bool = False):
 if __name__ == "__main__":
     # Generic already trained → now train BD with real parameters
     print(" Training BD version with real Bangladesh parameters from PDF...")
-    model_bd = train_ppo(version="bd", bd_mode=True)
+    model_constrained = train_ppo(version="constrained", constrained_network_mode=True)
     
     print("\n BD training completed!")
     print("Models saved in results/models/")

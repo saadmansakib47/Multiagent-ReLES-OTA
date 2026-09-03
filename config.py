@@ -16,7 +16,7 @@ Usage
 ENV_CFG = dict(
     n_agents          = 4,      # default number of ECU agents
     n_blocks          = 16,     # firmware blocks per agent
-    bd_mode           = True,   # Bangladesh network conditions
+    constrained_network_mode           = True,   # Bangladesh network conditions
     stochastic_latency= True,   # random packet-loss / delay per step
 )
 
@@ -32,7 +32,7 @@ SAFETY_CFG = dict(
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Bangladesh (BD) Network Conditions
 # ─────────────────────────────────────────────────────────────────────────────
-# These map directly to the bd_params.json values but are code-accessible.
+# These map directly to the network_params.json values but are code-accessible.
 BD_CFG = dict(
     # "Monsoon" burst-congestion scenario
     monsoon_jitter_ms       = 250,   # target one-way delay added by monsoon jitter
@@ -137,7 +137,7 @@ BENCHMARK_CFG = dict(
     # Mean episode return targets (higher / less-negative is better)
     # A model is deployment-ready when mean_return >= the target below.
     target_return_generic  = -25.0,   # generic network, 4 agents, 16 blocks
-    target_return_bd       = -40.0,   # BD (Bangladesh) congestion conditions
+    target_return_constrained       = -40.0,   # Constrained Network congestion conditions
 
     # Minimum improvement over IPPO to justify the added complexity of MAPPO/FP3O
     # FP3O should be at least 50% better than IPPO in mean return.

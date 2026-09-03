@@ -1,6 +1,6 @@
 from ota_env import OTAEnv
 
-env = OTAEnv(n_blocks=16, bd_mode=False)
+env = OTAEnv(n_blocks=16, constrained_network_mode=False)
 obs, _ = env.reset()
 print("Environment created successfully!")
 

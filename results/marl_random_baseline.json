@@ -2,13 +2,13 @@
   "method": "random_marl",
   "n_agents": 2,
   "n_episodes": 2,
-  "bd_mode": false,
-  "mean_fleet_payload": 24159.111063895252,
-  "std_fleet_payload": 3920.9601038925775,
-  "mean_fleet_memory": 48771.36748490474,
-  "mean_episode_steps": 17.0,
+  "constrained_network_mode": false,
+  "mean_fleet_payload": 17875.479732238702,
+  "std_fleet_payload": 5371.2868946484605,
+  "mean_fleet_memory": 35833.944687177776,
+  "mean_episode_steps": 10.0,
   "per_agent_mean_payload": {
-    "ecu_0": 11541.778505855118,
-    "ecu_1": 12617.33255804013
+    "ecu_0": 6730.015827032775,
+    "ecu_1": 11145.463905205928
   }
 }

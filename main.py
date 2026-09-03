@@ -93,7 +93,7 @@ def main():
     parser.add_argument("--n_epochs", type=int, default=TRAIN_CFG["n_epochs"], help="PPO gradient epochs per rollout")
     parser.add_argument("--ent_coef", type=float, default=TRAIN_CFG["ent_coef"], help="PPO entropy coefficient")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto", help="Training device")
-    parser.add_argument("--bd_mode", type=lambda x: str(x).lower() == "true", default=True, help="Enable constrained BD network")
+    parser.add_argument("--constrained_network_mode", type=lambda x: str(x).lower() == "true", default=True, help="Enable constrained network mode")
     parser.add_argument("--death_masking", type=lambda x: str(x).lower() == "true", default=True, help="Enable death masking")
     parser.add_argument("--type_conditioning", type=lambda x: str(x).lower() == "true", default=True, help="Enable semantic ECU type conditioning (False = blind/type-ablated)")
     parser.add_argument("--compare_algorithm", type=str, default="", help="Compare results against this algorithm")
@@ -114,7 +114,7 @@ def main():
     print(f"  Rollout:    {args.n_steps} x {args.n_envs} = {args.n_steps * args.n_envs}")
     print(f"  Batch size: {args.batch_size}")
     print(f"  Device:     {args.device}")
-    print(f"  BD Network: {args.bd_mode}")
+    print(f"  Constrained Network: {args.constrained_network_mode}")
     print("=" * 60)
 
     results_dir  = Path("results")
@@ -149,7 +149,7 @@ def main():
                 algorithm         = args.algorithm,
                 n_agents          = args.n_agents,
                 n_blocks          = args.n_blocks,
-                bd_mode           = args.bd_mode,
+                constrained_network_mode           = args.constrained_network_mode,
                 safety            = args.safety,
                 total_timesteps   = args.timesteps,
                 save_dir          = seed_dir,
@@ -179,7 +179,7 @@ def main():
                 n_blocks          = args.n_blocks,
                 n_eval_episodes   = args.eval_episodes,
                 safety            = args.safety,
-                bd_mode           = args.bd_mode,
+                constrained_network_mode           = args.constrained_network_mode,
                 type_conditioning = args.type_conditioning,
                 verbose           = True,
             )
@@ -266,7 +266,7 @@ def main():
                 print(f"  [warn] Chart generation skipped: {chart_err}")
 
         # ── Check benchmark targets ──────────────────────────────────────────
-        target = BENCHMARK_CFG["target_return_bd"]
+        target = BENCHMARK_CFG["target_return_constrained"]
         if mean_ret >= target:
             print(f"\n  ✅  BENCHMARK MET: {mean_ret:.2f} >= target {target}")
         else:
@@ -301,7 +301,7 @@ def main():
                 n_blocks          = args.n_blocks,
                 n_eval_episodes   = args.eval_episodes,
                 safety            = args.safety,
-                bd_mode           = args.bd_mode,
+                constrained_network_mode           = args.constrained_network_mode,
                 type_conditioning = args.type_conditioning,
                 verbose           = True,
             )
@@ -355,7 +355,7 @@ def main():
         print(df.to_string())
 
         # Benchmark checks
-        target = BENCHMARK_CFG["target_return_bd"]
+        target = BENCHMARK_CFG["target_return_constrained"]
         if mean_ret >= target:
             print(f"\n  ✅  BENCHMARK MET: {mean_ret:.2f} >= target {target}")
         else:

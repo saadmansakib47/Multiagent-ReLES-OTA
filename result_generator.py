@@ -67,18 +67,18 @@ if __name__ == "__main__":
         exit()
     
     try:
-        model_bd = PPO.load("results/models/ppo_bd_final.zip")
+        model_constrained = PPO.load("results/models/ppo_bd_final.zip")
         print(" Loaded BD model")
     except:
         print(" BD model not found yet. Using Generic model for BD env as fallback.")
-        model_bd = model_generic
+        model_constrained = model_generic
 
     # Evaluations
-    env_generic = OTAEnv(n_blocks=N_BLOCKS, bd_mode=False)
+    env_generic = OTAEnv(n_blocks=N_BLOCKS, constrained_network_mode=False)
     generic_rl = evaluate_model(model_generic, env_generic, 20, "Generic RL")
 
-    env_bd = OTAEnv(n_blocks=N_BLOCKS, bd_mode=True)
-    bd_rl = evaluate_model(model_bd, env_bd, 20, "BD RL")
+    env_constrained = OTAEnv(n_blocks=N_BLOCKS, constrained_network_mode=True)
+    bd_rl = evaluate_model(model_constrained, env_constrained, 20, "BD RL")
 
     # Baselines
     baseline_runner = BaselineRunner(n_blocks=N_BLOCKS)

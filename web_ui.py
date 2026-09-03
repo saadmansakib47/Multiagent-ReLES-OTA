@@ -220,12 +220,16 @@ def build_command(payload: dict) -> list[str]:
         str(float(payload.get("ent_coef", 0.01))),
         "--device",
         payload.get("device", "auto"),
-        "--bd_mode",
-        bool_arg(payload.get("bd_mode", True)),
+        "--constrained_network_mode",
+        bool_arg(payload.get("constrained_network_mode", True)),
         "--death_masking",
         bool_arg(payload.get("death_masking", True)),
         "--type_conditioning",
         bool_arg(payload.get("type_conditioning", True)),
+        "--coupled_channel",
+        bool_arg(payload.get("coupled_channel", False)),
+        "--gateway_bw_mbps",
+        str(float(payload.get("gateway_bw_mbps", 50.0))),
     ]
     if compare and compare != algorithm:
         command.extend(["--compare_algorithm", compare])

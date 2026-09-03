@@ -80,7 +80,7 @@ def test_api_compliance():
 
     try:
         from pettingzoo.test import parallel_api_test
-        env = MultiAgentOTAEnv(n_agents=3, n_blocks=6, bd_mode=False, stochastic_latency=False)
+        env = MultiAgentOTAEnv(n_agents=3, n_blocks=6, constrained_network_mode=False, stochastic_latency=False)
         parallel_api_test(env, num_cycles=10)
         print("  ✅  parallel_api_test PASSED")
         return True
@@ -102,7 +102,7 @@ def test_random_episodes():
     print("═" * 60)
 
     env = MultiAgentOTAEnv(
-        n_agents=4, n_blocks=12, bd_mode=True,
+        n_agents=4, n_blocks=12, constrained_network_mode=True,
         stochastic_latency=True
     )
 
@@ -142,7 +142,7 @@ def test_death_masking():
     print("═" * 60)
 
     # Use very few blocks so agents finish quickly and we can observe masking
-    env = MultiAgentOTAEnv(n_agents=4, n_blocks=4, bd_mode=False, stochastic_latency=False)
+    env = MultiAgentOTAEnv(n_agents=4, n_blocks=4, constrained_network_mode=False, stochastic_latency=False)
     obs, _ = env.reset(seed=99)
 
     death_mask_verified = defaultdict(bool)
@@ -196,12 +196,12 @@ def test_stochastic_latency():
     print("  TEST 4: Stochastic Latency — TX costs should differ from fixed latency")
     print("═" * 60)
 
-    env_stoch = MultiAgentOTAEnv(n_agents=2, n_blocks=8, bd_mode=False, stochastic_latency=True)
-    env_fixed = MultiAgentOTAEnv(n_agents=2, n_blocks=8, bd_mode=False, stochastic_latency=False)
+    env_stoch = MultiAgentOTAEnv(n_agents=2, n_blocks=8, constrained_network_mode=False, stochastic_latency=True)
+    env_fixed = MultiAgentOTAEnv(n_agents=2, n_blocks=8, constrained_network_mode=False, stochastic_latency=False)
 
     # Build one deterministic action trace, then replay it in both envs.
     # This isolates latency sampling from random-policy noise.
-    trace_env = MultiAgentOTAEnv(n_agents=2, n_blocks=8, bd_mode=False, stochastic_latency=False)
+    trace_env = MultiAgentOTAEnv(n_agents=2, n_blocks=8, constrained_network_mode=False, stochastic_latency=False)
     trace_env.reset(seed=123)
     action_trace = []
     while trace_env.agents:
@@ -257,7 +257,7 @@ def test_scalability():
 
     all_ok = True
     for n in [2, 4, 8, 16]:
-        env = MultiAgentOTAEnv(n_agents=n, n_blocks=12, bd_mode=True, stochastic_latency=True)
+        env = MultiAgentOTAEnv(n_agents=n, n_blocks=12, constrained_network_mode=True, stochastic_latency=True)
         t0 = time.time()
         try:
             result = run_episode(env, seed=7)

@@ -72,11 +72,11 @@ if __name__ == "__main__":
     # Evaluations
     print(f"Evaluating with n_blocks = {N_BLOCKS} ...")
     
-    env_generic = OTAEnv(n_blocks=N_BLOCKS, bd_mode=False)
+    env_generic = OTAEnv(n_blocks=N_BLOCKS, constrained_network_mode=False)
     generic_rl = evaluate_model(model_generic, env_generic, num_episodes=15)   # Reduced episodes for speed
     
-    env_bd = OTAEnv(n_blocks=N_BLOCKS, bd_mode=True)
-    bd_rl = evaluate_model(model_generic, env_bd, num_episodes=15)
+    env_constrained = OTAEnv(n_blocks=N_BLOCKS, constrained_network_mode=True)
+    bd_rl = evaluate_model(model_generic, env_constrained, num_episodes=15)
     
     # Baseline
     baseline_runner = BaselineRunner(n_blocks=N_BLOCKS)

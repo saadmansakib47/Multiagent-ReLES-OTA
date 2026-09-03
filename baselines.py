@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 
 class BaselineRunner:
-    def __init__(self, n_blocks=32, bd_mode=False):
+    def __init__(self, n_blocks=32, constrained_network_mode=False):
         self.n_blocks = n_blocks
-        self.bd_mode = bd_mode
+        self.constrained_network_mode = constrained_network_mode
         self.env = None
         self.reset_env()
 
     def reset_env(self):
-        self.env = OTAEnv(n_blocks=self.n_blocks, bd_mode=self.bd_mode)
+        self.env = OTAEnv(n_blocks=self.n_blocks, constrained_network_mode=self.constrained_network_mode)
 
     def run_random_baseline(self, num_episodes=50):
         """Random action baseline"""
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     Path("results").mkdir(exist_ok=True)
     
     print("Running Generic baselines...")
-    runner = BaselineRunner(n_blocks=24, bd_mode=False)
+    runner = BaselineRunner(n_blocks=24, constrained_network_mode=False)
     generic_stats = runner.run_random_baseline(num_episodes=30)
     seq_stats = runner.run_sequential_baseline(num_episodes=15)
     
@@ -126,11 +126,11 @@ if __name__ == "__main__":
     print(f"\nSequential Baseline:")
     print(f"   Mean Payload : {seq_stats['mean_payload']:.1f}")
     
-    # Optional BD run (if bd_params.json is good)
-    if Path("bd_params.json").exists():
+    # Optional BD run (if network_params.json is good)
+    if Path("network_params.json").exists():
         print("\nRunning BD version...")
-        bd_runner = BaselineRunner(n_blocks=24, bd_mode=True)
-        bd_stats = bd_runner.run_random_baseline(20)
+        constrained_runner = BaselineRunner(n_blocks=24, constrained_network_mode=True)
+        bd_stats = constrained_runner.run_random_baseline(20)
         plot_baseline_comparison(generic_stats, bd_stats)
     else:
         plot_baseline_comparison(generic_stats)

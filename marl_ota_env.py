@@ -36,6 +36,8 @@ from typing import Dict, List, Optional, Tuple
 from ota_core import (
     estimate_delta_size,
     calculate_tx_cost,
+    calculate_tx_cost_coupled,
+    load_network_params,
     load_bd_params,
 )
 
@@ -71,8 +73,8 @@ class MultiAgentOTAEnv(ParallelEnv):
     n_agents   : number of concurrent ECU agents (vehicles in fleet)
     n_blocks   : firmware blocks per agent (each agent manages this many)
     block_size : bytes per block
-    bd_mode    : enable Bangladesh-specific network parameters
-    bd_params_path : path to bd_params.json
+    constrained_network_mode    : enable Bangladesh-specific network parameters
+    net_params_path : path to network_params.json
     stochastic_latency : sample latency from Truncated Gaussian each step
                          (True for Phase 2 MARL; False for Phase 1 compat)
     max_steps  : hard episode limit per agent (safety cap)
@@ -96,24 +98,28 @@ class MultiAgentOTAEnv(ParallelEnv):
         n_agents: int = 4,
         n_blocks: int = 24,
         block_size: int = 4096,
-        bd_mode: bool = False,
-        bd_params_path: str = "bd_params.json",
+        constrained_network_mode: bool = False,
+        net_params_path: str = "network_params.json",
         stochastic_latency: bool = True,
         max_steps: int = None,
         render_mode: Optional[str] = None,
         ecu_types: Optional[Dict[str, str]] = None,
         safety_shield: bool = True,
         type_conditioning: bool = True,
+        coupled_channel: bool = False,
+        gateway_bw_mbps: float = 50.0,
     ):
         super().__init__()
 
         self.safety_shield      = safety_shield
         self.type_conditioning  = type_conditioning
+        self.coupled_channel    = coupled_channel
+        self.gateway_bw_mbps   = gateway_bw_mbps
         self.render_mode        = render_mode
         self.n_agents_total     = n_agents
         self.n_blocks           = n_blocks
         self.block_size         = block_size
-        self.bd_mode            = bd_mode
+        self.constrained_network_mode            = constrained_network_mode
         self.stochastic_latency = stochastic_latency
         self.max_steps          = max_steps if max_steps is not None else n_blocks * 3
 
@@ -129,8 +135,8 @@ class MultiAgentOTAEnv(ParallelEnv):
         }
 
         # Load network parameters
-        # load_bd_params() always merges with safe defaults — safe to call regardless of bd_mode
-        self.bd_params = load_bd_params(bd_params_path if bd_mode else "nonexistent_path_to_use_defaults")
+        # load_bd_params() always merges with safe defaults — safe to call regardless of constrained_network_mode
+        self.net_params = load_bd_params(net_params_path if constrained_network_mode else "nonexistent_path_to_use_defaults")
 
         # Agent IDs (stable — never mutated after __init__)
         self.possible_agents: List[str] = [f"ecu_{i}" for i in range(n_agents)]
@@ -176,7 +182,7 @@ class MultiAgentOTAEnv(ParallelEnv):
                              (preserved even in zero-vector death-mask obs)
           state            : Box(state_dim,) — global state representation
         """
-        state_dim = self.n_agents_total * (self.n_blocks + 4)
+        state_dim = self.n_agents_total * (self.n_blocks + 4) + (1 if self.coupled_channel else 0)
         return spaces.Dict({
             "mask":             spaces.MultiBinary(self.n_blocks),
             "cum_encoding_cost": spaces.Box(0, np.inf, (1,), dtype=np.float32),
@@ -189,7 +195,7 @@ class MultiAgentOTAEnv(ParallelEnv):
 
     def _get_global_state(self) -> np.ndarray:
         state_parts = []
-        mem_budget = self.bd_params.get("memory_budget_fraction", 1.0)
+        mem_budget = self.net_params.get("memory_budget_fraction", 1.0)
         mem_cap    = self.n_blocks * self.block_size * 2.0 * mem_budget
 
         for a in self.possible_agents:
@@ -202,6 +208,15 @@ class MultiAgentOTAEnv(ParallelEnv):
                 mem = np.array([min(self.cum_memory[a] / max(mem_cap, 1.0), 1.0)], dtype=np.float32)
                 s = np.array([self.current_step[a]], dtype=np.float32)
                 state_parts.extend([m, e, t, mem, s])
+        # When coupled_channel=True, append a scalar [0,1] representing
+        # the fraction of the gateway bandwidth currently consumed (gateway load).
+        # This gives FP3O's shared backbone a direct congestion coordination signal.
+        if self.coupled_channel:
+            n_tx = getattr(self, '_last_n_transmitting', 0)
+            gateway_load = np.array(
+                [n_tx / max(self.n_agents_total, 1)], dtype=np.float32
+            )
+            state_parts.append(gateway_load)
         return np.concatenate(state_parts)
 
     def observation_space(self, agent: str) -> spaces.Dict:
@@ -243,6 +258,7 @@ class MultiAgentOTAEnv(ParallelEnv):
             self.terminations[agent] = False
             self.truncations[agent]  = False
 
+        self._last_n_transmitting = 0   # gateway contention counter; updated each step
         self._episode_start = time.time()
 
         observations = {agent: self._get_obs(agent) for agent in self.agents}
@@ -292,7 +308,7 @@ class MultiAgentOTAEnv(ParallelEnv):
             }
 
         # ── Normal observation ──
-        mem_budget = self.bd_params.get("memory_budget_fraction", 1.0)
+        mem_budget = self.net_params.get("memory_budget_fraction", 1.0)
         mem_cap    = self.n_blocks * self.block_size * 2.0 * mem_budget  # approx max memory
 
         return {
@@ -361,16 +377,36 @@ class MultiAgentOTAEnv(ParallelEnv):
                 
             delta_size = estimate_delta_size(block_idx, operation, self._similarity_bias[agent], self.block_size)
             encoding_cost = delta_size * (1.25 if operation == 2 else 1.0)
-            tx_cost = calculate_tx_cost(delta_size, self.bd_params, stochastic=self.stochastic_latency)
-            if self.bd_mode:
-                tx_cost *= self.bd_params.get("monsoon_multiplier", 1.0)
+            tx_cost = calculate_tx_cost(delta_size, self.net_params, stochastic=self.stochastic_latency)
+            if self.constrained_network_mode:
+                tx_cost *= self.net_params.get("monsoon_multiplier", 1.0)
             overhead = delta_size * (2.6 if operation == 2 else 1.9)
             
             valid_actions[agent] = (block_idx, operation, delta_size, overhead, encoding_cost, tx_cost)
             proposed_overhead[agent] = overhead
 
+        # -- Coupled channel bandwidth contention ----------------------------------
+        # When coupled_channel=True, Modify (op=1) and Modify+Backup (op=2) agents
+        # share a finite gateway downlink. Copy (op=0) is EXEMPT because its delta
+        # payload (~64 bytes) is negligible and traverses the control plane, not the
+        # shared data-plane bottleneck. See ota_core.calculate_tx_cost_coupled().
+        if self.coupled_channel:
+            n_tx = sum(1 for a, v in valid_actions.items() if v[1] != 0)
+            n_tx = max(n_tx, 1)
+            self._last_n_transmitting = n_tx   # stored for obs gateway_load signal
+            for agent, (bi, op, ds, oh, enc, tx) in list(valid_actions.items()):
+                if op != 0:
+                    new_tx = calculate_tx_cost_coupled(
+                        ds, self.net_params, n_tx,
+                        self.gateway_bw_mbps, self.stochastic_latency
+                    )
+                    valid_actions[agent] = (bi, op, ds, oh, enc, new_tx)
+        else:
+            self._last_n_transmitting = 0
+        # --------------------------------------------------------------------------
+
         current_M = sum(self.cum_memory[a] for a in self.possible_agents)
-        mem_budget = self.bd_params.get("memory_budget_fraction", 1.0)
+        mem_budget = self.net_params.get("memory_budget_fraction", 1.0)
         # Use safety threshold from config; alpha=0.5 scales the safety margin
         safety_frac = SAFETY_CFG["memory_budget_frac"]  # e.g. 0.85
         alpha = 0.5
@@ -617,7 +653,7 @@ def make_marl_ota_aec(**kwargs):
 if __name__ == "__main__":
     print("Smoke-testing MultiAgentOTAEnv ...")
 
-    env = MultiAgentOTAEnv(n_agents=4, n_blocks=8, bd_mode=True, stochastic_latency=True)
+    env = MultiAgentOTAEnv(n_agents=4, n_blocks=8, constrained_network_mode=True, stochastic_latency=True)
     obs, infos = env.reset(seed=42)
     print(f"Reset OK — {len(env.agents)} agents, obs keys: {list(obs['ecu_0'].keys())}")
 

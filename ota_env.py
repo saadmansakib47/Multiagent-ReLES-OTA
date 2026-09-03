@@ -12,13 +12,13 @@ class OTAEnv(gym.Env):
     ReLES-OTA Custom Gymnasium Environment (faithful replication + BD adaptation)
     """
 
-    def __init__(self, n_blocks: int = 24, block_size: int = 4096, bd_mode: bool = False, bd_params_path: str = "bd_params.json"):
+    def __init__(self, n_blocks: int = 24, block_size: int = 4096, constrained_network_mode: bool = False, net_params_path: str = "network_params.json"):
         super().__init__()
         self.n_blocks = n_blocks
         self.block_size = block_size
-        self.bd_mode = bd_mode
+        self.constrained_network_mode = constrained_network_mode
 
-        self.bd_params = self._load_bd_params(bd_params_path)
+        self.net_params = self._load_bd_params(net_params_path)
 
         # Dummy firmware blocks
         self.old_blocks = [np.random.bytes(block_size) for _ in range(n_blocks)]
@@ -80,7 +80,7 @@ class OTAEnv(gym.Env):
             "mask": self.mask.copy(),
             "cum_encoding_cost": np.array([self.cum_encoding_cost], dtype=np.float32),
             "cum_tx_cost": np.array([self.cum_tx_cost], dtype=np.float32),
-            "memory_used": np.array([min(self.cum_memory / max(self.bd_params["memory_budget_fraction"], 0.01), 1.0)], dtype=np.float32),
+            "memory_used": np.array([min(self.cum_memory / max(self.net_params["memory_budget_fraction"], 0.01), 1.0)], dtype=np.float32),
             "step": np.array([self.current_step], dtype=np.int32),
         }
 
@@ -97,9 +97,9 @@ class OTAEnv(gym.Env):
         return max(64.0, base_delta)
 
     def _calculate_tx_cost(self, payload_bytes: float) -> float:
-        latency_factor = 1.0 + (self.bd_params["latency_base_ms"] / 800.0)
-        loss_factor = 1.0 + (self.bd_params["packet_loss_rate"] * 6.0)
-        bandwidth_factor = 800.0 / max(self.bd_params["bandwidth_mbps"], 5.0)
+        latency_factor = 1.0 + (self.net_params["latency_base_ms"] / 800.0)
+        loss_factor = 1.0 + (self.net_params["packet_loss_rate"] * 6.0)
+        bandwidth_factor = 800.0 / max(self.net_params["bandwidth_mbps"], 5.0)
         
         tx_cost = payload_bytes * latency_factor * loss_factor * bandwidth_factor * 0.0008
         return tx_cost

@@ -54,17 +54,17 @@ from marl_ota_env import MultiAgentOTAEnv
 # ══════════════════════════════════════════════════════════════
 
 def run_random_marl(n_agents: int = 4, n_blocks: int = 16, n_episodes: int = 20,
-                    bd_mode: bool = False) -> dict:
+                    constrained_network_mode: bool = False) -> dict:
     """
     Run N episodes with purely random agents.
     Used as the MARL baseline (equivalent to Phase 1's random baseline).
     """
     print(f"\n Running Random Multi-Agent Baseline")
-    print(f"   n_agents={n_agents}, n_blocks={n_blocks}, n_episodes={n_episodes}, bd_mode={bd_mode}")
+    print(f"   n_agents={n_agents}, n_blocks={n_blocks}, n_episodes={n_episodes}, constrained_network_mode={constrained_network_mode}")
 
     env = MultiAgentOTAEnv(
         n_agents=n_agents, n_blocks=n_blocks,
-        bd_mode=bd_mode, stochastic_latency=bd_mode
+        constrained_network_mode=constrained_network_mode, stochastic_latency=constrained_network_mode
     )
 
     episode_payloads     = []
@@ -101,7 +101,7 @@ def run_random_marl(n_agents: int = 4, n_blocks: int = 16, n_episodes: int = 20,
         "method":          "random_marl",
         "n_agents":        n_agents,
         "n_episodes":      n_episodes,
-        "bd_mode":         bd_mode,
+        "constrained_network_mode":         constrained_network_mode,
         "mean_fleet_payload": float(np.mean(episode_payloads)),
         "std_fleet_payload":  float(np.std(episode_payloads)),
         "mean_fleet_memory":  float(np.mean(episode_memories)),
@@ -125,7 +125,7 @@ def train_algorithm(
     algorithm: str      = "fp3o",
     n_agents: int       = 4,
     n_blocks: int       = 16,
-    bd_mode: bool       = False,
+    constrained_network_mode: bool       = False,
     safety: bool        = True,
     total_timesteps: int = 500_000,
     save_dir: str       = "results/marl_models",
@@ -137,7 +137,9 @@ def train_algorithm(
     device: str          = "auto",
     death_masking: bool  = True,
     type_conditioning: bool = True,
-    seed: int            = 42,
+    coupled_channel: bool   = False,
+    gateway_bw_mbps: float  = 50.0,
+    seed: int               = 42,
 ) -> None:
     """
     Train Independent PPO (IPPO) on the multi-agent OTA env.
@@ -207,7 +209,7 @@ def train_algorithm(
 
 
     print(f"\n Training {algorithm.upper()} on MultiAgentOTAEnv")
-    print(f"   n_agents={n_agents}, n_blocks={n_blocks}, bd_mode={bd_mode}, safety={safety}")
+    print(f"   n_agents={n_agents}, n_blocks={n_blocks}, constrained_network_mode={constrained_network_mode}, safety={safety}")
     print(f"   total_timesteps={total_timesteps:,}, n_envs={n_envs}, n_steps={n_steps}, batch_size={batch_size}")
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
@@ -216,9 +218,11 @@ def train_algorithm(
     def make_env():
         return MultiAgentOTAEnv(
             n_agents=n_agents, n_blocks=n_blocks,
-            bd_mode=bd_mode, stochastic_latency=bd_mode,
+            constrained_network_mode=constrained_network_mode, stochastic_latency=constrained_network_mode,
             safety_shield=safety,
             type_conditioning=type_conditioning,
+            coupled_channel=coupled_channel,
+            gateway_bw_mbps=gateway_bw_mbps,
         )
 
     raw_env = make_env()
@@ -292,7 +296,7 @@ def train_algorithm(
         policy_kwargs   = policy_kwargs,
         verbose         = 1,
         device          = selected_device,
-        tensorboard_log = f"{save_dir}/logs/{algorithm}_{'bd' if bd_mode else 'generic'}",
+        tensorboard_log = f"{save_dir}/logs/{algorithm}_{'constrained' if constrained_network_mode else 'generic'}",
         learning_rate   = linear_schedule(3e-4),
         n_steps         = n_steps,
         batch_size      = batch_size,
@@ -318,7 +322,7 @@ def train_algorithm(
     model.learn(total_timesteps=total_timesteps, progress_bar=True, callback=callback)
     elapsed = time.time() - t0
 
-    tag = "bd" if bd_mode else "generic"
+    tag = "bd" if constrained_network_mode else "generic"
     model.save(f"{save_dir}/{algorithm}_{tag}_final")
     print(f"\n  Training done in {elapsed:.1f}s  →  saved to {save_dir}/{algorithm}_{tag}_final")
 
@@ -347,7 +351,7 @@ def main():
                         help="MARL algorithm to train")
     parser.add_argument("--n_agents",   type=int, default=4,       help="Number of ECU agents")
     parser.add_argument("--n_blocks",   type=int, default=16,      help="Firmware blocks per agent")
-    parser.add_argument("--bd_mode",    action="store_true",       help="Enable BD network parameters")
+    parser.add_argument("--constrained_network_mode",    action="store_true",       help="Enable constrained network parameters")
     parser.add_argument("--safety",     type=lambda x: str(x).lower() == 'true', default=True, help="Enable Safety Shield")
     parser.add_argument("--timesteps",  type=int, default=100_000, help="Training timesteps")
     parser.add_argument("--n_envs",     type=int, default=10,      help="Number of parallel rollout environments")
@@ -356,6 +360,10 @@ def main():
     parser.add_argument("--device",     choices=["auto", "cpu", "cuda"], default="auto", help="Training device")
     parser.add_argument("--death_masking", type=lambda x: str(x).lower() == 'true', default=True,
                         help="Keep finished agents masked with zero observations")
+    parser.add_argument("--coupled_channel",   type=lambda x: str(x).lower()=='true', default=False,
+                        help="Enable shared gateway bandwidth contention (coupled channel mode)")
+    parser.add_argument("--gateway_bw_mbps",   type=float, default=50.0,
+                        help="Total gateway downlink bandwidth (Mbps) shared by all ECUs in coupled mode")
     parser.add_argument("--type_conditioning", type=lambda x: str(x).lower() == 'true', default=True,
                         help="Enable semantic ECU type conditioning (False = blind/type-ablated)")
     parser.add_argument("--episodes",   type=int, default=20,      help="Episodes for random baseline")
@@ -366,14 +374,14 @@ def main():
     print("╚" + "═" * 55 + "╝")
     print(f"  Mode: {args.mode.upper()}")
     print(f"  Algorithm: {args.algorithm.upper()}")
-    print(f"  Agents: {args.n_agents} | Blocks/agent: {args.n_blocks} | BD mode: {args.bd_mode} | Safety: {args.safety} | TypeCond: {args.type_conditioning}")
+    print(f"  Agents: {args.n_agents} | Blocks/agent: {args.n_blocks} | Constrained Network: {args.constrained_network_mode} | Safety: {args.safety} | TypeCond: {args.type_conditioning}")
 
     if args.mode == "random":
         results = run_random_marl(
             n_agents   = args.n_agents,
             n_blocks   = args.n_blocks,
             n_episodes = args.episodes,
-            bd_mode    = args.bd_mode,
+            constrained_network_mode    = args.constrained_network_mode,
         )
         out_path = Path("results/marl_random_baseline.json")
         out_path.parent.mkdir(exist_ok=True)
@@ -386,7 +394,7 @@ def main():
             algorithm         = args.algorithm,
             n_agents          = args.n_agents,
             n_blocks          = args.n_blocks,
-            bd_mode           = args.bd_mode,
+            constrained_network_mode           = args.constrained_network_mode,
             safety            = args.safety,
             total_timesteps   = args.timesteps,
             n_envs            = args.n_envs,
@@ -395,6 +403,8 @@ def main():
             device            = args.device,
             death_masking     = args.death_masking,
             type_conditioning = args.type_conditioning,
+            coupled_channel   = args.coupled_channel,
+            gateway_bw_mbps   = args.gateway_bw_mbps,
         )
 
 
