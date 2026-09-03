@@ -2,3 +2,5 @@ Experiment,Mean_Return,CI_95,p_value_vs_IPPO,Mean_Payload_Cost,Shield_Rate,N_Age
 FP3O_Safety_True,5.09,26.14,0.2846,45244.7,0.0,4,16,2000897,5
 IPPO_Safety_True,16.71,0.0,,38335.2,0.0,4,16,2000897,5
 MAPPO_Safety_True,16.71,0.0,0.0791,38336.5,0.0,4,16,2000897,5
+FP3O_Blind_Safety_True,16.71,0.0,0.7994,38335.2,0.0,4,16,2000897,5
+IPPO_Blind_Safety_True,16.71,0.0,0.405,38334.7,0.0,4,16,2000897,5
