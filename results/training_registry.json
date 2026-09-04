@@ -587,5 +587,25 @@
     "type_conditioning": true,
     "coupled_channel": true,
     "gateway_bw_mbps": 25.0
+  },
+  {
+    "run_id": 35,
+    "timestamp": "2026-09-03T16:53:18.013367+00:00",
+    "algorithm": "MAPPO_COUPLED",
+    "safety": true,
+    "n_seeds": 2,
+    "timesteps_per_seed": 100353,
+    "total_env_steps": 200706,
+    "mean_return": -176.9388,
+    "ci_95": 810.176,
+    "p_value_vs_ippo": "0.2025",
+    "n_agents": 4,
+    "n_blocks": 16,
+    "mean_payload_cost": 122119.5,
+    "shield_rate": 0.4083,
+    "eval_episodes": 20,
+    "type_conditioning": true,
+    "coupled_channel": true,
+    "gateway_bw_mbps": 25.0
   }
 ]
