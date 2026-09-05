@@ -53,5 +53,9 @@
   "MAPPO_Coupled_Safety_True": [
     -240.7010193847339,
     -113.1765510038357
+  ],
+  "MAPPO_Blind_Coupled_Safety_True": [
+    -238.7328675138452,
+    16.713706538814513
   ]
 }
