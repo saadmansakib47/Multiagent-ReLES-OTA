@@ -7,6 +7,7 @@
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
+\usepackage{url}
 \usepackage{booktabs}
 \usepackage{tikz}
 \usepackage{pgfplots}
@@ -54,21 +55,22 @@ question is: does coordinating heterogeneous ECU agents under coupled-channel
 contention require explicit per-role policy specialization, as FP3O~\cite{b2}
 provides, or does naive parameter sharing suffice?
 
-Our authoritative 5-seed, 100,353-timestep coupled-channel benchmark reveals a
-phenomenon we term \emph{Representation Interference}: in homogeneous parameter-sharing
-baselines (IPPO and MAPPO), injecting agent-type identity into a single shared actor
-head forces it to simultaneously approximate mutually conflicting optimal policies,
-causing \emph{degradation} upon type conditioning (IPPO: $-27.4$\,pts; MAPPO:
-$-52.2$\,pts). FP3O's disentangled-head architecture completely resolves this,
-surging by $\mathbf{+111.44}$ points ($-213.64 \to -102.20$) upon type
-conditioning. Crucially, while unconditioned IPPO achieves a statistically
-indistinguishable return ($p > 0.05$), it does so as a \emph{free-rider}---leaning on
-the external safety shield in $32.66\%$ of steps. FP3O Type-Conditioned internalizes
-bandwidth-safety constraints, reducing emergency shield interventions to
-$\mathbf{13.82\%}$, a $57.7\%$ reduction. FP3O further demonstrates a
-${\approx}20{\times}$ sample-complexity advantage over IPPO in mastering contention-aware
-temporal staggering, critical for automotive CI/CD pipelines and ECU digital-twin
-training.
+Our authoritative 5-seed, 100,353-timestep coupled-channel benchmark reveals an
+empirical pattern that we term \emph{Representation Interference}: in the shared-actor
+baselines (IPPO and MAPPO), injecting agent-type identity is associated with lower
+return under coupled contention (IPPO: $-27.4$\,pts; MAPPO: $-52.2$\,pts). We interpret
+this pattern as evidence consistent with interference between role-dependent learning
+signals, rather than as a direct measurement of gradient conflict. FP3O shows the
+opposite response, with a $\mathbf{+111.44}$-point improvement ($-213.64 \to -102.20$)
+upon type conditioning. IPPO Blind attains the highest mean return in the 100k benchmark,
+but its return is statistically indistinguishable from FP3O Type-Conditioned ($p>0.05$)
+while its safety-shield intervention rate is substantially higher ($32.66\%$ versus
+$13.82\%$). We therefore treat FP3O Type-Conditioned as the preferred operating point
+when both task return and reliance on the external safety mechanism are considered.
+Long-horizon coupled-channel runs at 2,000,897 timesteps show reward saturation near
+$16.71$ for all six configurations, so the 100k results are interpreted primarily as
+evidence about early training dynamics and safety behavior rather than final attainable
+return.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -92,12 +94,18 @@ is therefore a cyber-physical multi-agent coordination challenge with hard safet
 constraints.
 
 A key physical bottleneck is the \emph{shared gateway downlink}: when multiple ECUs
-concurrently push update payloads, they contend for the same cellular bandwidth
-(typically $25$--$50$ Mbps TCU downlink under urban load \cite{halder2020ota}).
-Naive concurrent transmission degrades throughput for all agents, increasing update
-latency and cost. Effective policy learning must internalize this bandwidth-coupling
-and learn to temporally stagger transmissions---a fundamentally cooperative, contention-aware
-coordination skill.
+concurrently receive update payloads through the vehicle's cellular connection, they
+compete for a common communication resource. Automotive OTA literature identifies
+bandwidth, connectivity, and update latency as practical constraints, while cellular
+vehicle communication studies commonly use tens of Mbps as a representative high-rate
+vehicle link regime~\cite{halder2020ota,scalota,gsma5g}. We therefore set the simulated
+gateway capacity to $25$ Mbps as a conservative scenario parameter rather than claiming
+that every production TCU operates at exactly this rate. This value is below the
+$50$ Mbps experienced downlink reported for urban and high-speed-vehicle scenarios in
+5G planning guidance~\cite{gsma5g}, leaving headroom for concurrent vehicle traffic
+and protocol overhead. Under this shared cap, simultaneous firmware transfers compete
+for the same gateway resource, which creates a meaningful scheduling problem: policies
+can reduce contention by temporally staggering transmissions.
 
 Multi-Agent Reinforcement Learning (MARL) is a natural framework for this problem.
 The seminal ``surprising effectiveness'' of parameter-sharing PPO \cite{b3} has encouraged
@@ -106,23 +114,26 @@ experience for sample efficiency. FP3O \cite{b2} extends this with per-ECU-type
 specialized actor heads on a shared backbone, anticipating that heterogeneous
 hardware roles may require structurally disentangled policies.
 
-But which approach is actually needed under bandwidth-coupled, heterogeneous OTA scheduling?
-The answer is far from obvious. We conduct a rigorous 5-seed empirical investigation
-and uncover a fundamental, previously unreported failure mode of naive parameter sharing
-under coupled-channel contention: \textbf{Representation Interference}.
+But which approach is appropriate under bandwidth-coupled, heterogeneous OTA scheduling?
+The answer is not determined by parameter sharing alone. We conduct a 5-seed empirical
+investigation of a $2\times3$ architecture-by-conditioning design and examine both
+return and safety-shield intervention. We use the term \textbf{Representation Interference}
+to describe the observed degradation of shared actors after type conditioning under
+coupled contention. The mechanism is motivated by the gradient-conflict literature,
+but gradients are not directly measured in this study.
 
 \textbf{Contributions:}
 \begin{enumerate}
   \item A safety-constrained, Shapley-credited multi-agent OTA scheduling environment
     with \emph{coupled gateway downlink contention}, extending~\cite{b1} to the
     cooperative MARL setting with physical bandwidth-coupling physics.
-  \item Formal identification of the \emph{Representation Interference} phenomenon:
-    a single shared actor head, when conditioned on heterogeneous agent types competing
-    for shared bandwidth, suffers destructive gradient interference that degrades
-    coordination quality.
-  \item Empirical demonstration that FP3O's disentangled-head architecture resolves
-    Representation Interference, achieving a $+111.44$-point leap upon type conditioning
-    and a $57.7\%$ reduction in emergency safety-shield interventions.
+  \item Empirical characterization of a \emph{Representation Interference} pattern:
+    shared actor baselines degrade after type conditioning under coupled contention,
+    whereas FP3O improves substantially. The observed pattern is discussed in relation
+    to gradient conflict, without claiming direct gradient-level verification.
+  \item Empirical demonstration that FP3O Type-Conditioned provides the strongest
+    combined operating point in the 100k benchmark, with a $+111.44$-point improvement
+    over FP3O Blind and a $57.7\%$ lower shield intervention rate than IPPO Blind.
   \item Identification and correction of an agent-identity observation confound that
     silently converts nominally shared policies into per-agent lookup tables,
     confirming the caution in~\cite{b14} with a concrete numerical instance.
@@ -136,46 +147,78 @@ under coupled-channel contention: \textbf{Representation Interference}.
 \textbf{Vehicular OTA scheduling.}
 ReLES-OTA~\cite{b1} formulates single-vehicle OTA scheduling as a codec-construction
 MDP solved with single-agent PPO~\cite{schulman2017ppo}, reducing payload and memory
-overhead versus heuristic baselines. \citet{halder2020ota} surveys electric-vehicle
+overhead versus heuristic baselines. \cite{halder2020ota} surveys electric-vehicle
 firmware distribution architectures, highlighting the bandwidth and memory constraints
 our simulator models. We extend ReLES-OTA to multi-agent, adding bandwidth-coupled
 gateway contention.
 
 \textbf{Cooperative MARL and parameter sharing.}
-Yu et al.~\cite{b3} demonstrated that fully-shared IPPO and MAPPO match or exceed more
-complex MARL architectures (MADDPG~\cite{b10}, COMA~\cite{b11}, QMIX~\cite{b13}) on
-standard cooperative benchmarks, largely through full experience pooling. FP3O~\cite{b2}
-shares a backbone but routes it into per-type specialized heads for heterogeneous
-fleets. Terry et al.~\cite{b14} caution that parameter-sharing benefits depend
-critically on how agent identity is encoded in the observation space---a point this
-paper validates numerically in the vehicular OTA domain.
+Centralized-training-with-decentralized-execution (CTDE) has become a standard design
+for cooperative MARL. MADDPG~\cite{b10} uses a centralized critic with decentralized
+actors, while COMA~\cite{b11} introduces counterfactual credit assignment. Value-based
+methods such as VDN~\cite{b12} and QMIX~\cite{b13} factorize team value functions.
+For on-policy methods, Yu et al.~\cite{b3} showed that carefully configured IPPO and
+MAPPO can match or exceed more elaborate baselines on a range of cooperative tasks,
+providing strong evidence for parameter sharing and simple actor-critic designs.
 
-Critically, all prior demonstrations of parameter-sharing superiority use
-\emph{decoupled channels}: agents do not contend for shared bandwidth, so a
-symmetric compromise policy minimizes variance without needing to specialize.
-Our coupled-channel formulation is the first to show that this assumption fails
-under realistic vehicular gateway contention.
+Parameter sharing is attractive because experience collected by multiple agents updates
+the same policy representation. Terry et al.~\cite{b14}, however, showed that the
+benefit depends strongly on how agent identity is represented and how heterogeneous
+observation and action spaces are handled. More recent heterogeneous-agent methods
+such as HATRPO and HAPPO explicitly account for heterogeneous policies and sequential
+policy updates~\cite{harl}. Other work has explored structured parameter sharing for
+physically heterogeneous agents, including unified action-space approaches~\cite{uas}
+and heterogeneous skill representations~\cite{hskill}. These studies motivate a
+middle ground between one completely shared policy and fully independent networks.
+FP3O~\cite{b2} follows this design principle by sharing a representation backbone
+while using specialized policy heads for different agent types.
 
-\textbf{Representation interference and multi-task gradient conflict.}
-The destructive gradient interference we observe is closely related to
-multi-task gradient conflict~\cite{yu2020pcgrad}: when a single network is asked
-to optimize incompatible objectives for different agent types, gradient cancellation
-produces worse solutions than type-specific networks. Our result is the first
-instantiation of this phenomenon in a CTDE MARL setting with coupled-channel physics.
+\textbf{Heterogeneity and representation structure.}
+The literature suggests that heterogeneity can be handled through agent indicators,
+structured action spaces, sequential updates, or explicit role-specific representations.
+Our study focuses on a narrower question: when agents have different operation-cost
+preferences and compete for a common gateway resource, does adding semantic type
+information to a shared actor improve coordination, or can it make optimization harder?
+The coupled OTA environment provides a controlled setting in which the answer can be
+examined using the same PPO objective across shared and specialized architectures.
+
+The observed degradation after type conditioning is consistent with the broader idea of
+conflicting learning signals in shared representations. PCGrad~\cite{yu2020pcgrad}
+formalizes gradient conflict in multi-task learning, where task gradients can point in
+opposing directions. We use this literature as an interpretation framework rather than
+as direct evidence of measured gradient cancellation, since our experiments record
+policy outcomes rather than per-role gradient cosine similarities.
+
+\textbf{Vehicular OTA scheduling and bandwidth constraints.}
+ReLES-OTA~\cite{b1} formulates single-vehicle OTA scheduling as a codec-construction
+MDP solved with PPO, reducing payload and memory overhead relative to heuristic
+baselines. Broader automotive OTA studies emphasize connectivity, bandwidth, resource
+constraints, security, and update reliability~\cite{halder2020ota,ota_survey}. ScalOTA
+also identifies the vehicle-side cellular path as a bandwidth and latency bottleneck
+and proposes an alternative distribution architecture~\cite{scalota}. Our work retains
+the single-vehicle OTA scheduling setting but introduces multiple heterogeneous ECUs
+that share one gateway resource, turning bandwidth contention into part of the learned
+coordination problem.
 
 \textbf{Safe MARL and credit assignment.}
-We adopt a CBF-inspired safety filter~\cite{ames2019cbf} providing hard memory-budget
-guarantees regardless of policy quality. Alshiekh et al.~\cite{alshiekh2018shielding}
-and Smith et al.~\cite{b16} apply similar shields to multi-agent driving. We use Monte
-Carlo Shapley approximation~\cite{shapley1953,castro2009shapley} for cooperative credit
-assignment, essential for attributing individual contributions when per-type costs differ.
+Shielding methods constrain RL actions during exploration or execution and can be used
+as a safety layer around a learned policy~\cite{alshiekh2018shielding}. Control Barrier
+Functions provide another formal framework for maintaining safety constraints in
+continuous and cyber-physical systems~\cite{ames2019cbf}. Recent safe MARL work also
+studies scalable constrained policy optimization under joint safety constraints~\cite{scalmappol}. Our shield is deliberately simpler: it is a deterministic runtime
+filter for the simulated memory constraint. Consequently, shield activation rate is
+reported as a behavioral diagnostic rather than as a claim of formal vehicle-level
+safety certification. We use Monte Carlo Shapley approximation~\cite{shapley1953,castro2009shapley}
+for cooperative credit assignment when heterogeneous operation costs make equal reward
+splitting less informative.
 
 \textbf{Training stability.}
-We employ Proximal Policy Optimization~\cite{schulman2017ppo} with KL early stopping
-based on the Trust Region Policy Optimization framework~\cite{schulman2015trpo},
-and PopArt-style value normalization~\cite{vanhasselt2016popart} to stabilize critic
-targets across heterogeneous reward scales. Action masking~\cite{huang2020masking}
-eliminates invalid block selections, accelerating convergence.
+We employ Proximal Policy Optimization~\cite{schulman2017ppo} with KL early stopping,
+following the trust-region motivation of TRPO~\cite{schulman2015trpo}, and PopArt-style
+value normalization~\cite{vanhasselt2016popart}. Invalid-action masking~\cite{huang2020masking}
+removes infeasible block selections before sampling. These components are kept identical
+across the compared architectures as far as the implementation permits, so that the
+main experimental contrast remains architecture and type conditioning.
 
 
 %%==========================================================================
@@ -219,8 +262,12 @@ environment is paramount.
 In an uncoupled channel (studied in prior work), each agent experiences an independent
 wireless link, so simultaneous transmissions do not interfere. In our
 \textbf{coupled-channel} formulation, all ECUs share a single vehicle gateway
-downlink with capacity $B_{\text{gw}}$ Mbps (set to $25$ Mbps, reflecting
-4G/5G TCU urban load \cite{halder2020ota}). When $n_{\text{tx}}$ agents
+downlink with capacity $B_{\text{gw}}$ Mbps. We set $B_{\text{gw}}=25$ Mbps as a
+conservative simulation parameter within the tens-of-Mbps vehicle connectivity regime,
+rather than as a universal TCU specification. In particular, 5G planning guidance reports
+an experienced downlink of $50$ Mbps for urban and high-speed-vehicle scenarios~\cite{gsma5g};
+using half of that figure provides a deliberately constrained shared-gateway regime while
+leaving room for non-OTA traffic and protocol overhead. When $n_{\text{tx}}$ agents
 simultaneously push firmware payloads:
 \begin{equation}
   B_{\text{eff}} = \frac{B_{\text{gw}}}{\max(n_{\text{tx}},\,1)},
@@ -258,13 +305,15 @@ anchored upon four rigorous authenticity pillars:
   standard ISO 14229-1 \cite{iso14229} over CAN FD and 100BASE-T1 automotive Ethernet gateways.
 
   \item \textbf{Pillar II: Empirical V2X Wireless Telecommunications Constraints (3GPP \& IEEE 802.11p).}
-  The gateway throughput cap ($B_{\text{gw}} = 25$ Mbps) and coupled-channel interference model
-  are calibrated against empirical cellular telematics control unit (TCU) performance in urban
-  deployments specified in 3GPP Rel-14/Rel-16 Cellular-V2X (C-V2X) \cite{3gpp_cv2x} and
-  IEEE 802.11p Dedicated Short-Range Communications (DSRC) vehicular field trials
-  \cite{ieee80211p, halder2020ota}. Rather than penalizing agents with arbitrary synthetic loss
-  functions, contention is governed by actual physical multi-access channel division (Eq.~\ref{eq:coupled}),
-  where concurrent wireless bursts directly degrade throughput and extend packet flight times.
+  The gateway throughput cap ($B_{\text{gw}} = 25$ Mbps) is selected as a conservative
+  scenario parameter within the experienced-rate regime reported for vehicle connectivity,
+  while the coupled-channel mechanism represents shared-resource contention rather than a
+  claim about one specific commercial TCU. 5G guidance reports $50$ Mbps experienced
+  downlink in urban and high-speed-vehicle scenarios~\cite{gsma5g}, and automotive OTA
+  studies identify bandwidth and connectivity as practical update constraints~\cite{halder2020ota,ota_survey}.
+  Rather than introducing an arbitrary penalty for simultaneous transmission, the simulator
+  models contention through Eq.~\ref{eq:coupled}, where concurrent wireless transfers divide
+  the available gateway capacity.
 
   \item \textbf{Pillar III: Formally Verified Safety Shielding.}
   Autonomous learning agents exploring high-dimensional action spaces inevitably violate temporal
@@ -369,10 +418,12 @@ every proposed joint action before execution. If the grand-coalition overhead wo
 push cumulative fleet memory above $85\%$ of budget, agents with the highest overhead
 are blocked in greedy-decreasing order until the constraint is satisfied. The shield
 guarantees hard memory-budget compliance independent of policy quality during
-exploration. Crucially, shield activation rate is a key metric: policies that
-\emph{internalize} bandwidth safety constraints trigger the shield rarely; policies
-that rely on the shield as an external crutch (``free-riding'') trigger it
-frequently---degrading throughput and increasing bus jitter.
+exploration. Crucially, shield activation rate is also a behavioral diagnostic. We use ``shield-dependent
+behavior'' operationally for a policy that obtains competitive task return while frequently
+proposing actions that are subsequently suppressed by the external safety filter. The term
+``free-rider'' is used only as shorthand for this observable pattern; it does not imply that
+the policy intentionally exploits the shield. Lower intervention rates indicate that more of
+the constraint is respected by the learned policy before the external filter is applied.
 
 \subsection{Policy Architectures}
 \label{sec:archs}
@@ -431,12 +482,14 @@ In IPPO/MAPPO with a single shared actor, gradients from all ECU types accumulat
   \nabla_\theta \mathcal{L} =
     \sum_{k \in \mathcal{K}} \nabla_\theta \mathcal{L}^k.
 \]
-When $\nabla_\theta \mathcal{L}^{\text{Eng}}$ and
-$\nabla_\theta \mathcal{L}^{\text{Info}}$ point in opposing directions (as they do
-when Engine favors Modify+Backup and Infotainment favors Copy under coupled contention),
-their sum is reduced or cancelled---a direct instance of gradient
-conflict~\cite{yu2020pcgrad}. FP3O routes each $\nabla_\theta \mathcal{L}^k$ to
-its dedicated head, eliminating cross-type cancellation.
+When role-specific objectives favor different actions, the corresponding updates to
+shared parameters can compete. For example, Engine and Infotainment agents have different
+operation-cost preferences in our coupled environment. This creates a plausible route to
+shared-representation interference, analogous to gradient conflict in multi-task learning~\cite{yu2020pcgrad}.
+We did not directly measure pairwise gradient cosine similarity, so the experiment supports
+this mechanism as an interpretation of the behavioral result rather than as a verified
+optimization-level measurement. FP3O instead assigns role-specific action and position
+heads, reducing direct parameter sharing at the final policy-distribution stage.
 
 \subsection{Type Conditioning vs.\ Agent-Identity Conditioning}
 \label{sec:type-cond}
@@ -470,7 +523,9 @@ and step-budget expansion. Phase~4 introduced ECU heterogeneity and uncovered th
 Phase~5 implemented FP3O with dynamic batch routing. Phase~6 generalized network
 parameters from region-specific to generic constrained CPS conditions. Phase~7 implemented
 coupled-channel contention with Copy exemption. Phase~8 conducted the authoritative
-5-seed benchmark, revealing Representation Interference and the Free-Rider Shield Phenomenon.
+5-seed coupled-channel benchmark and the subsequent long-horizon validation, revealing
+an early-training architecture/conditioning trade-off and reward saturation at extended
+training horizons.
 
 \begin{figure}[htbp]
 \centering
@@ -487,13 +542,13 @@ coupled-channel contention with Copy exemption. Phase~8 conducted the authoritat
 \node[phase, below=of p4] (p5) {\textbf{Ph.5} FP3O architecture: shared backbone $256{\to}256{\to}128$ + specialized action/position heads};
 \node[phase, below=of p5] (p6) {\textbf{Ph.6} Network params generalization: \texttt{bd\_params} $\to$ generic CPS constraints (25 Mbps)};
 \node[phase, below=of p6] (p7) {\textbf{Ph.7} Coupled-channel: gateway BW contention (Eq.~\ref{eq:coupled}) + Copy exemption};
-\node[phase, below=of p7] (p8) {\textbf{Ph.8} 5-seed $\times$ 100k benchmark: Representation Interference + Free-Rider Shield discovered};
+\node[phase, below=of p7] (p8) {\textbf{Ph.8} 5-seed $\times$ 100k benchmark + 2M validation: architecture/conditioning trade-off + reward saturation};
 \foreach \a/\b in {p1/p2, p2/p3, p3/p4, p4/p5, p5/p6, p6/p7, p7/p8}
   \draw[arrow] (\a.south) -- (\b.north);
 \end{tikzpicture}
 \caption{Research development lifecycle across eight phases. Each phase built upon
-and corrected prior findings, culminating in the coupled-channel Representation
-Interference discovery.}
+and corrected prior findings, culminating in the coupled-channel architecture/conditioning study
+and its long-horizon validation.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -520,9 +575,11 @@ KL threshold $\delta_{\text{KL}}=0.2$.
 Two horizons serve complementary roles:
 (i) \emph{100,353 timesteps}: the transient sample-efficiency regime where
 coordination skills form and policy differences are maximal---our primary benchmark.
-(ii) \emph{2,000,897 timesteps}: asymptotic saturation, where the $+10.0$ completion
-bonus and $16\times0.5$ step bonuses compress all non-crashing policies into
-$[16.70,16.72]$, masking coordination quality (Section~\ref{sec:asym}).
+(ii) \emph{2,000,897 timesteps}: a long-horizon validation regime used to test whether
+the early differences persist. In the coupled-channel runs, all six architecture/conditioning
+configurations eventually approach the same empirical reward ceiling near $16.71$.
+This long-horizon reward saturation limits the usefulness of final return as a discriminator,
+so the 100k benchmark is retained for comparing early learning dynamics and shield behavior.
 
 \textbf{Seeds and statistics.}
 $N_{\text{seeds}}=5$ per configuration, following NeurIPS/ICLR MARL benchmarking
@@ -585,118 +642,118 @@ FP3O Type-Conditioned confirm $p>0.05$ (statistically indistinguishable returns)
 
 \subsection{Failure of Naive Parameter Sharing under Contention}
 
-In both IPPO and MAPPO, enabling type conditioning \emph{hurts} performance:
-IPPO drops $27.4$ points ($-85.27 \to -112.64$);
-MAPPO drops $52.2$ points ($-135.70 \to -187.88$).
-Simultaneously, shield activation rates remain stubbornly high ($32$--$65\%$),
-indicating that both baselines rely heavily on the external governor.
+In both IPPO and MAPPO, enabling type conditioning lowers the 100k return:
+IPPO drops $27.4$ points ($-85.27 \to -112.64$), while MAPPO drops $52.2$ points
+($-135.70 \to -187.88$). Shield activation also remains substantial in both baselines.
+We use these observations as the empirical signature of the phenomenon termed
+\emph{Representation Interference}. The result is consistent with a shared actor
+having difficulty accommodating role-dependent learning signals under coupled contention,
+but the present study does not directly measure the gradients needed to establish
+cancellation at the optimization level.
 
-This is the signature of Representation Interference. Under coupled contention,
-the optimal policy for Engine (minimize Modify+Backup cost, stagger away from
-other safety-critical ECUs) directly conflicts with the optimal policy for
-Infotainment (exploit Copy's zero-contention cost). When ECU-type identity is
-provided to a single shared actor head, the gradient update at each step mixes
-these opposing signals:
-\[
-  \nabla_\theta \mathcal{L} \approx
-    \nabla_\theta \mathcal{L}^{\text{Eng}} + \nabla_\theta \mathcal{L}^{\text{Info}}
-    \approx \mathbf{0},
-\]
-producing destructive cancellation~\cite{yu2020pcgrad}. In \emph{blind} mode,
-no type identity is injected; the shared actor converges to a symmetric, role-agnostic
-compromise policy that, despite being sub-optimal for each type individually, produces
-fewer collisions because all agents behave identically and predictably.
+Under blind conditioning, the actor receives no semantic ECU-type indicator. Its policy
+therefore cannot explicitly distinguish the operation-cost preferences encoded by the
+four roles. Under type conditioning, the same parameter set must represent role-dependent
+responses. The degradation observed for IPPO and MAPPO suggests that the additional
+semantic information does not automatically improve coordination when it is introduced
+through a single shared policy head.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_interference.pdf}
 \caption{Representation Interference summary: $\Delta$Return when switching from
-Blind to Type-Conditioned per architecture. Red (negative) bars indicate policy
-degradation in shared-actor baselines; the green bar shows FP3O's $+111.44$
-structural gain from disentangled heads.}
+Blind to Type-Conditioned per architecture. Negative bars indicate policy degradation
+in the shared-actor baselines; the positive FP3O bar shows the gain obtained when its
+specialized heads receive semantic type information.}
 \label{fig:interference}
 \end{figure}
 
 \subsection{FP3O's Structural Resilience}
 
-FP3O exhibits the \emph{opposite} response: type conditioning produces a massive
-$\mathbf{+111.44}$-point surge ($-213.64 \to -102.20$). In blind mode, FP3O's
-specialized heads are blinded to their purpose, causing fragmented, role-incoherent
-parameter updates that maximize contention. With type conditioning, each head
-receives only same-role gradient signals; the Engine head learns to stagger heavy
-Modify+Backup operations; the Infotainment head learns to issue Copy operations
-during peak contention windows. This structural role disentanglement is precisely
-the inductive bias FP3O's architecture was designed to provide.
+FP3O exhibits the opposite response: type conditioning produces a
+$\mathbf{+111.44}$-point improvement ($-213.64 \to -102.20$). In blind mode, the
+specialized heads do not receive semantic type information, so the architecture cannot
+reliably route observations to role-appropriate output behavior. With type conditioning,
+each ECU type is routed to its corresponding action and position heads. The result is a
+large improvement in the 100k coupled-channel benchmark and supports the architectural
+hypothesis that limited role-specific parameterization can be useful when operation costs
+and contention patterns differ by ECU type.
 
 \subsection{Autonomous Coordination vs.\ the Free-Rider Shield Phenomenon}
 
-Nominally, IPPO Blind achieves a higher mean return ($-85.27$) than FP3O
-Type-Conditioned ($-102.20$). However, this comparison obscures a critical
-safety-engineering difference. Their 95\% confidence intervals overlap substantially
-($\pm173.39$ vs.\ $\pm113.58$), and a Welch $t$-test confirms $p > 0.05$: the
-returns are statistically indistinguishable.
+IPPO Blind achieves a higher mean return ($-85.27$) than FP3O Type-Conditioned
+($-102.20$) in the 100k benchmark. Their 95\% confidence intervals overlap substantially
+($\pm173.39$ versus $\pm113.58$), and the reported Welch test gives $p>0.05$.
+The return difference should therefore not be treated as evidence that IPPO Blind is
+statistically superior.
 
-What \emph{is} statistically distinct is their safety behavior. IPPO Blind acts as a
-\textbf{free-rider}: it achieves competitive reward by exploiting the external safety
-shield as a soft governor, triggering emergency interventions in $32.66\%$ of steps.
-In a real ECU gateway, each shielded action corresponds to a delayed or aborted
-firmware chunk---increasing update latency, wasting TCU radio resources, and risking
-partial-write conditions if the vehicle moves out of cellular coverage mid-update.
+The two configurations nevertheless exhibit markedly different shield behavior. IPPO Blind
+triggers the external safety filter in $32.66\%$ of steps, compared with $13.82\%$ for
+FP3O Type-Conditioned. We describe the former as \emph{shield-dependent} or, more briefly,
+``free-riding'' only in this operational sense: the learned policy frequently proposes
+actions that the external governor subsequently suppresses while the aggregate return
+remains competitive. This terminology does not imply intentional exploitation by the
+policy. From an engineering perspective, a policy that requires fewer interventions leaves
+more of the safety constraint satisfied by the learned behavior itself.
 
-FP3O Type-Conditioned internalizes contention-awareness into its learned policy,
-reducing shield activations to $\mathbf{13.82\%}$---a $\mathbf{57.7\%}$ absolute
-reduction. It achieves temporal staggering autonomously: safety-critical ECUs transmit
-heavy patches sequentially, while infotainment ECUs fill inter-transmission gaps with
-Copy operations. This autonomous safety coordination is the primary engineering
-contribution of the specialized-head architecture.
+FP3O Type-Conditioned therefore provides the preferred trade-off in our evaluation. It
+does not maximize raw 100k return, but it combines competitive return with the lowest
+shield intervention rate among the six configurations in the primary benchmark.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/fig_shield_rate.pdf}
 \caption{Safety-shield activation rate per algorithm (5 seeds, 100k steps).
-FP3O Type-Conditioned achieves the lowest rate (13.82\,\%), a 57.7\,\% absolute
-reduction vs.\ IPPO Blind (32.66\,\%), demonstrating autonomous internalized
-contention-awareness rather than free-riding on the external governor.}
+FP3O Type-Conditioned achieves the lowest rate (13.82\%), compared with 32.66\% for
+IPPO Blind. Shield activation is reported as a behavioral diagnostic of reliance on the
+external safety filter.}
 \label{fig:shield}
 \end{figure}
 
-\subsection{Sample Efficiency and Convergence Dynamics}
+\subsection{Early Training Differences and Long-Horizon Reward Saturation}
 \label{sec:asym}
 
-Table~\ref{tab:asymptotic} contrasts the 100k-step coupled-channel benchmark
-against asymptotic 2M-step runs on uncoupled channels. At 2M steps, even IPPO
-converges to $16.7133$ ($\pm0.0016$, $0\%$ shield). This is a \textbf{reward
-saturation} artifact: the $+10.0$ completion bonus and $16\times0.5 = 8$ step
-bonuses dominate, compressing all non-crashing policies into the narrow
-$[16.70,16.72]$ band. The saturation masks coordination quality entirely.
+The 100k coupled-channel benchmark is intentionally paired with a longer 2,000,897-step
+coupled-channel validation. The purpose of the long run is not to rank final returns, but
+to determine whether the early differences remain visible after extended optimization.
+Across the six configurations, the return eventually approaches an empirical ceiling near
+$16.71$. The convergence is consistent with the structure of the reward: the $+10.0$
+completion bonus and the repeated $+0.5$ progress bonuses can dominate the scale of the
+episode return once agents reliably complete their backlogs. We therefore refer to this
+effect as \textbf{long-horizon reward saturation}. At that point, final return provides
+little information about the quality of the coordination policy itself, which motivates
+reporting the transient 100k results and shield intervention rate separately.
 
 \begin{table}[htbp]
-\caption{Asymptotic ceiling vs.\ sample-efficiency regime. At 2M steps the reward
-saturates for all algorithms; meaningful differences emerge only in the 100k regime.}
+\caption{Long-horizon coupled-channel validation. After 2,000,897 timesteps,
+all six architecture/conditioning configurations approach the same empirical reward
+ceiling near $16.71$, illustrating long-horizon reward saturation.}
 \begin{center}
 \small
-\begin{tabular}{llrr}
+\begin{tabular}{lr}
 \toprule
-\textbf{Algorithm} & \textbf{Steps} & \textbf{Return} & \textbf{Shield (\%)} \\
+\textbf{Configuration} & \textbf{Final Return} \\
 \midrule
-IPPO Type-Cond. & 2,000,897 & 16.7133 ($\pm$0.0016) & 0.0\% \\
-IPPO Blind      & 2,000,897 & 16.7123 ($\pm$0.0013) & 0.0\% \\
-\midrule
-FP3O Type-Cond. & 100,353   & \textbf{-102.20} ($\pm$113.58) & \textbf{13.82\%} \\
-IPPO Blind      & 100,353   & -85.27 ($\pm$173.39) & 32.66\% \\
+IPPO Type-Conditioned & $\approx 16.71$ \\
+IPPO Blind & $\approx 16.71$ \\
+MAPPO Type-Conditioned & $\approx 16.71$ \\
+MAPPO Blind & $\approx 16.71$ \\
+FP3O Type-Conditioned & $\approx 16.71$ \\
+FP3O Blind & $\approx 16.71$ \\
 \bottomrule
 \end{tabular}
-\label{tab:asymptotic}
+\label{tab:longhorizon}
 \end{center}
 \end{table}
 
-FP3O Type-Conditioned demonstrates a ${\approx}20\times$ sample-complexity advantage:
-it masters contention-aware temporal staggering within 100k steps, while IPPO requires
-2M steps (with 0\% shielding only achievable after full saturation). For automotive
-CI/CD pipelines that must retrain scheduling policies with each firmware release cycle
-(potentially weekly in SDV deployments), and for hardware-in-the-loop (HIL) simulation
-testbenches with expensive ECU digital twins, this training efficiency translates
-directly to engineering cost reduction.
+The long-horizon result changes how the 100k comparison should be interpreted. We do
+not claim a fixed $20\times$ sample-complexity advantage, because all six configurations
+can eventually reach the same reward ceiling in the extended coupled-channel runs. The
+stronger and better-supported conclusion is that FP3O Type-Conditioned reaches a more
+favorable early-training operating point, combining substantially lower shield intervention
+with a large improvement over FP3O Blind. This distinction matters for applications where
+training or policy adaptation must be stopped before reward saturation, although the present
+study does not quantify the engineering cost of retraining in a production OTA pipeline.
 
 \begin{figure}[htbp]
 \centering
@@ -713,14 +770,14 @@ selective block-operation scheduling driven by its internalized coordination pol
 %%==========================================================================
 
 \textbf{Practical implications.}
-Our results establish that in bandwidth-coupled vehicular OTA systems, naive parameter
-sharing is insufficient: it either fails under type conditioning (Representation
-Interference) or succeeds only by free-riding on external safety infrastructure.
-FP3O's disentangled heads are necessary for genuine autonomous contention-awareness.
-For fleet-management system designers, we recommend auditing observation spaces for
-agent-identity leakage~\cite{b14}, adopting coupled-channel simulation for policy
-evaluation, and using shield activation rate (not just mean return) as a primary
-benchmark metric.
+The 100k benchmark suggests that architecture and conditioning should be evaluated jointly
+in bandwidth-coupled OTA scheduling. IPPO Blind obtains the highest mean return, but its
+shield intervention rate is substantially higher than that of FP3O Type-Conditioned, while
+the two returns are statistically indistinguishable at the reported sample size. Under a
+safety-aware evaluation criterion, FP3O Type-Conditioned is therefore the preferred
+operating point in our study. The result also reinforces the importance of auditing
+observation spaces for agent-identity leakage~\cite{b14}, evaluating policies under
+shared-channel contention, and reporting shield intervention alongside mean return.
 
 \textbf{Scalability.}
 All experiments use $N=4$ agents and $16$ blocks. Modern vehicles host $30$--$80$
@@ -730,41 +787,50 @@ for larger $N$. FP3O's $O(N_{\mathcal{K}})$ head overhead scales with the number
 ECU types, not the number of individual agents---a favorable property.
 
 \textbf{Confidence and sample size.}
-At $n=5$, overlapping 95\% CIs are directionally informative but not
-statistically confirmatory. The shield-rate difference ($32.66\%$ vs.\ $13.82\%$)
-is the most robust finding, as it is a structural property of how each architecture
-responds to contention.
+At $n=5$, the wide and overlapping 95\% CIs mean that return differences should be
+interpreted cautiously. In particular, the higher mean return of IPPO Blind over FP3O
+Type-Conditioned is not statistically distinguishable at the reported sample size. The
+shield-rate contrast is nevertheless operationally important because it captures a distinct
+aspect of policy behavior, although a dedicated statistical test of shield events would be
+needed for stronger inference.
 
-\textbf{Reward saturation.}
-The $+10.0$ completion bonus must be reduced or removed in future work to prevent
-the asymptotic masking effect, enabling meaningful long-horizon comparisons.
+\textbf{Long-horizon reward saturation.}
+The $+10.0$ completion bonus and dense progress reward compress the return scale after
+extended training. Future experiments should reduce the dominance of these bonuses or
+add coordination-sensitive metrics such as contention cost, completion time, and shield
+interventions. Such changes would make long-horizon comparisons more informative.
 
 \textbf{Synthetic cost model.}
-All results use a simulated OTA cost model rather than real vehicle telemetry or
-firmware images, limiting external validity of specific numerical results. The
-qualitative findings on Representation Interference and Free-Rider Shielding
-are architectural and should transfer to real deployments.
+All results use a simulated OTA cost model rather than real vehicle telemetry or firmware
+images, limiting the external validity of the numerical results. The observed architectural
+pattern is useful as a hypothesis for real deployments, but its transferability must be
+validated with hardware-in-the-loop or vehicle telemetry before operational conclusions are
+drawn.
 
 
 %%==========================================================================
 \section{Conclusion}
 %%==========================================================================
 
-We investigated whether coordinating heterogeneous ECUs under coupled gateway
-bandwidth contention requires explicit per-role policy specialization. We introduced
-the \textbf{Representation Interference} phenomenon: homogeneous parameter-sharing
-baselines (IPPO, MAPPO) degrade upon type conditioning because a single shared actor
-head cannot simultaneously represent conflicting ECU-role-optimal policies under
-contention. FP3O's disentangled-head architecture resolves this, achieving a
-$+111.44$-point surge and, crucially, reducing reliance on the external safety shield
-from $32.66\%$ to $13.82\%$ of steps---demonstrating autonomous, internalized
-contention-aware coordination.
+We investigated how semantic type conditioning and policy architecture affect
+heterogeneous ECU coordination under a shared OTA gateway. In the 100k coupled-channel
+benchmark, shared IPPO and MAPPO show lower returns after type conditioning, a behavioral
+pattern we interpret as consistent with representation interference. FP3O shows the opposite
+trend: type conditioning improves its return by $+111.44$ points and reduces shield
+interventions from $64.68\%$ to $13.82\%$ relative to FP3O Blind. IPPO Blind achieves
+the highest mean return in this transient benchmark, but its $32.66\%$ shield rate is much
+higher than FP3O Type-Conditioned, and the return difference is not statistically
+significant at $n=5$. For a safety-aware operating criterion, FP3O Type-Conditioned is
+therefore the preferred configuration in the studied regime.
 
-Our work establishes that \emph{beyond naive parameter sharing}, the automotive OTA
-scheduling problem requires architectural role disentanglement to achieve safe,
-bandwidth-efficient multi-agent coordination. Future work will scale to $30$+~ECUs
-with Monte Carlo Shapley, validate on real vehicle telemetry, and explore
-communication-augmented FP3O variants~\cite{b17} for anticipatory bandwidth planning.
+The 2,000,897-step coupled-channel runs add an important qualification: all six
+configurations eventually approach an empirical return ceiling near $16.71$. This
+long-horizon reward saturation means that final return alone cannot distinguish the learned
+coordination strategies. The main evidence of architectural difference therefore lies in
+the transient learning regime and in the degree to which policies rely on the external
+shield. Future work should use coordination-sensitive long-horizon metrics, scale beyond
+four ECUs, evaluate additional seeds and heterogeneous team compositions, and validate the
+coupled-channel model with real vehicle or hardware-in-the-loop measurements.
 
 
 \section*{Code and Data Availability}
@@ -935,6 +1001,40 @@ G.~Dalal, K.~Dvijotham, M.~Vecerik, T.~Hester, C.~Paduraru, and Y.~Tassa,
 ``Safe exploration in continuous action spaces with low-order policy networks,''
 in \textit{Proc. AAAI Conf. Artificial Intelligence}, vol.~32, no.~1, 2018.
 
+
+\bibitem{harl}
+Y. Zhong, J. G. Kuba, X. Feng, S. Hu, J. Ji, and Y. Yang,
+``Heterogeneous-Agent Reinforcement Learning,'' 2023, arXiv:2304.09870.
+
+\bibitem{uas}
+X. Yu, Y. Lin, S. Wang, K. Lv, and S. Han,
+``Improving global parameter-sharing in physically heterogeneous multi-agent
+reinforcement learning with unified action space,'' 2024, arXiv:2408.07395.
+
+\bibitem{hskill}
+Y. Liu, Y. Li, X. Xu, Y. Dou, and D. Liu,
+``Heterogeneous skill learning for multi-agent tasks,'' in \textit{Proc. Advances
+in Neural Information Processing Systems (NeurIPS)}, vol. 35, 2022.
+
+\bibitem{scalota}
+A. Shoker, F. Alves, and P. Esteves-Verissimo,
+``ScalOTA: Scalable secure over-the-air software updates for vehicles,''
+in \textit{Proc. IEEE Int. Symp. Reliable Distributed Systems (SRDS)}, 2023,
+doi: 10.1109/SRDS60353.2023.00024.
+
+\bibitem{ota_survey}
+A. Ghosal, S. Halder, and M. Conti,
+``Secure over the air software update for connected vehicles,''
+\textit{Computer Networks}, vol. 214, 2022, Art. no. 109394.
+
+\bibitem{gsma5g}
+GSMA,
+``5G implementation guidelines: NSA option 3,'' GSMA, 2019.
+
+\bibitem{scalmappol}
+L. Zhang, L. Li, W. Wei, H. Song, Y. Yang, and J. Liang,
+``Scalable constrained policy optimization for safe multi-agent reinforcement learning,''
+in \textit{Proc. Advances in Neural Information Processing Systems (NeurIPS)}, vol. 37, 2024.
 \end{thebibliography}
 
 \end{document}
