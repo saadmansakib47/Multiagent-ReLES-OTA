@@ -1,0 +1,291 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% personnelhandler.sty
+%
+% Handles variables number of author and allows their name
+% and id extraction for IUT BSc Thesis Template
+%
+% Author: MIA
+% Email: ishrakabedin@iut-dhaka.edu
+%
+% IUT BSc Thesis Report Template written by MBH and MIA
+
+% Logs:
+% 01> 19 June 2023: Added basic variable author info storing
+%     and looping
+% 02> 21 June 2023: Added author count and translating author
+%     list to a sentence clause functionality
+% 03> 21 June 2023: Added count safety and co-supervisor
+%     handling capabilities
+% 04> 21 June 2023: Added supervisor handling capability
+% 05> 21 June 2023: Changed package name to "personnelhandler"
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{personnelhandler}[2023/06/21 v0.5 LaTeX package for multiple author (student) management for IUT BSc Thesis Template]
+
+% Prerequisite package loading
+\RequirePackage{etoolbox}
+\RequirePackage{pgffor}
+\RequirePackage{xstring}
+
+% Helper command to append strings to a command
+\newcommand{\appendto}[2]{%
+  \expandafter\g@addto@macro\csname#1\endcsname{#2}%
+}
+
+%%------------------------------- Author Handling --------------------------%%
+
+% \authorlist will contain the authorlist, where each entry is appended with
+% comma (,). Each entry contains student name and id, separated with asterisk.
+% Initially to denote an empty list, "EMPTY" is assigned as the value of the
+% command.
+\newcommand{\authorlist}{NULL}
+
+% Command to add new author. Checks whether the list is empty or not. If empty,
+% renew the command with information of the first author, else append to existing information
+\newcommand*{\addauthor}[2]{%
+    \ifdefstring{\authorlist}{NULL}%
+    {%
+        \renewcommand{\authorlist}{{#1}*{#2}}%
+    } %else
+    {%
+        \appendto{authorlist}{,{#1}*{#2}}%
+    }%
+}
+
+% Command to split and fetch the name of an author
+\newcommand*{\getauthorname}[1]{%
+    \StrBefore{#1}{*}[\name]%
+    \name%
+}
+
+% Command to split and fetch the id of an author
+\newcommand*{\getauthorid}[1]{%
+    \StrBehind{#1}{*}[\id]%
+    \id%
+}
+
+% Helper command to find the count of authors
+\newcounter{authorcounter}
+
+\newcommand*{\countauthor}{%
+    \setcounter{authorcounter}{0}%
+    \ifdefstring{\authorlist}{NULL}%
+    {%
+        % Do Nothing
+    }%else
+    {%
+        \foreach \item in \authorlist{%
+            \stepcounter{authorcounter}%
+        }%
+    }%
+}
+
+% Command for getting author count in text format.
+% For internal number, directly use the counter as \theauthorcounter
+\newcommand*{\getauthorcount}{%
+    \countauthor%
+    \arabic{authorcounter}%
+}
+
+% Command for converting author names from an author list to a clause
+\newcommand*{\authornametoclause}{%
+    \countauthor%
+    \ifnum\theauthorcounter=0%
+        \textbf{\textit{(NO AUTHOR DEFINED)}}%
+    \else\ifnum\theauthorcounter=1%
+        \getauthorname{\authorlist}%
+    \else\ifnum\theauthorcounter=2%
+        \StrBefore{\authorlist}{,}[\firstvalue]%
+        \StrBehind{\authorlist}{,}[\secondvalue]%
+        \getauthorname{\firstvalue}\ and \getauthorname{\secondvalue}%
+    \else%
+        \StrBefore[\numexpr\value{authorcounter}-1]{\authorlist}{,}[\firstvalues]%
+        \StrBehind[\numexpr\value{authorcounter}-1]{\authorlist}{,}[\lastvalue]%
+        \foreach \authorinfo in \firstvalues {%
+            \getauthorname{\authorinfo}, %
+        }%
+        and \getauthorname{\lastvalue}%
+    \fi\fi\fi%
+}
+
+% Command for converting author names from an author list to a clause, name is bold
+\newcommand*{\authorbnametoclause}{%
+    \countauthor%
+    \ifnum\theauthorcounter=0%
+        \textbf{\textit{(NO AUTHOR DEFINED)}}%
+    \else\ifnum\theauthorcounter=1%
+        \textbf{\textbf{\getauthorname{\authorlist}}}%
+    \else\ifnum\theauthorcounter=2%
+        \StrBefore{\authorlist}{,}[\firstvalue]%
+        \StrBehind{\authorlist}{,}[\secondvalue]%
+        \textbf{\getauthorname{\firstvalue}}\ and \textbf{\getauthorname{\secondvalue}}%
+    \else%
+        \StrBefore[\numexpr\value{authorcounter}-1]{\authorlist}{,}[\firstvalues]%
+        \StrBehind[\numexpr\value{authorcounter}-1]{\authorlist}{,}[\lastvalue]%
+        \foreach \authorinfo in \firstvalues {%
+            \textbf{\getauthorname{\authorinfo}}, %
+        }%
+        and \textbf{\getauthorname{\lastvalue}}%
+    \fi\fi\fi%
+}
+
+%%--------------------------- Co-Supervisor Handling ----------------------%%
+\newcommand*{\cosupervisorlist}{NULL}
+
+% Store format: <Name*Designation;Department>
+% Do not put comma in any of the values
+\newcommand*{\addcosupervisor}[3]{%
+    \ifdefstring{\cosupervisorlist}{NULL}%
+    {%
+        \renewcommand{\cosupervisorlist}{{#1}*{#2};{#3}}%
+    } %else
+    {%
+        \appendto{cosupervisorlist}{,{#1}*{#2};{#3}}%
+    }%
+}
+
+% Command to split and fetch the name of a co-supervisor
+\newcommand*{\getcosupervisorname}[1]{%
+    \StrBefore{#1}{*}[\name]%
+    \name%
+}
+
+% Command to split and fetch the designation of a co-supervisor
+\newcommand*{\getcosupervisordesignation}[1]{%
+    \StrBehind{#1}{*}[\disigdept]%
+    \StrBefore{\disigdept}{;}[\designation]%
+    \designation%
+}
+
+% Command to split and fetch the department of a co-supervisor
+\newcommand*{\getcosupervisordepartment}[1]{%
+    \StrBehind{#1}{;}[\department]%
+    \department%
+}
+
+% Command to get the qualified name of a co-supervisor
+\newcommand*{\getcosupervisorqname}[1]{%
+    \getcosupervisorname{#1}, \getcosupervisordesignation{#1}, \getcosupervisordepartment{#1}%
+}
+
+% Command to get the qualified name of a co-supervisor, name is bold
+\newcommand*{\getcosupervisorbqname}[1]{%
+    \textbf{\getcosupervisorname{#1}}, \getcosupervisordesignation{#1}, \getcosupervisordepartment{#1}%
+}
+
+% Helper command to find the count of co-supervisors
+\newcounter{cosupervisorcounter}
+
+\newcommand*{\countcosupervisor}{%
+    \setcounter{cosupervisorcounter}{0}%
+    \ifdefstring{\cosupervisorlist}{NULL}%
+    {%
+        % Do Nothing
+    }%else
+    {%
+        \foreach \item in \cosupervisorlist{%
+            \stepcounter{cosupervisorcounter}%
+        }%
+    }%
+}
+
+% Command for getting co-supervisor count in text format.
+% For internal number, directly use the counter as \theauthorcounter
+\newcommand*{\getcosupervisorcount}{%
+    \countcosupervisor%
+    \arabic{cosupervisorcounter}%
+}
+
+% Helper command to write something only if there is atleast one co-supervisor
+\newcommand*{\ifhascosupervisor}[2]{%
+    \countcosupervisor%
+    \ifnum\thecosupervisorcounter>0%
+        #1%
+    \else%
+        #2%
+    \fi%
+}
+
+% Command for converting cosupervisor qualified names from an author list to a clause
+\newcommand*{\cosupervisorqnametoclause}{%
+    \countcosupervisor%
+    \ifnum\thecosupervisorcounter=0%
+        \textbf{\textit{(NO CO-SUPERVISOR DEFINED)}}%
+    \else\ifnum\thecosupervisorcounter=1%
+        \getcosupervisorqname{\cosupervisorlist}%
+    \else\ifnum\thecosupervisorcounter=2%
+        \StrBefore{\cosupervisorlist}{,}[\firstvalue]%
+        \StrBehind{\cosupervisorlist}{,}[\secondvalue]%
+        \getcosupervisorqname{\firstvalue}\ and \getcosupervisorqname{\secondvalue}%
+    \else%
+        \StrBefore[\numexpr\value{cosupervisorcounter}-1]{\cosupervisorlist}{,}[\firstvalues]%
+        \StrBehind[\numexpr\value{cosupervisorcounter}-1]{\cosupervisorlist}{,}[\lastvalue]%
+        \foreach \cosupervisorinfo in \firstvalues {%
+            \getcosupervisorqname{\cosupervisorinfo}, %
+        }%
+        and \getcosupervisorqname{\lastvalue}%
+    \fi\fi\fi%
+}
+
+% Command for converting cosupervisor qualified names from an author list to a clause
+% Name is bold
+\newcommand*{\cosupervisorbqnametoclause}{%
+    \countcosupervisor%
+    \ifnum\thecosupervisorcounter=0%
+        \textbf{\textit{(NO CO-SUPERVISOR DEFINED)}}%
+    \else\ifnum\thecosupervisorcounter=1%
+        \getcosupervisorbqname{\cosupervisorlist}%
+    \else\ifnum\thecosupervisorcounter=2%
+        \StrBefore{\cosupervisorlist}{,}[\firstvalue]%
+        \StrBehind{\cosupervisorlist}{,}[\secondvalue]%
+        \getcosupervisorbqname{\firstvalue}\ and \getcosupervisorbqname{\secondvalue}%
+    \else%
+        \StrBefore[\numexpr\value{cosupervisorcounter}-1]{\cosupervisorlist}{,}[\firstvalues]%
+        \StrBehind[\numexpr\value{cosupervisorcounter}-1]{\cosupervisorlist}{,}[\lastvalue]%
+        \foreach \cosupervisorinfo in \firstvalues {%
+            \getcosupervisorbqname{\cosupervisorinfo}, %
+        }%
+        and \getcosupervisorbqname{\lastvalue}%
+    \fi\fi\fi%
+}
+
+%%--------------------------- Supervisor Handling -------------------------%%
+
+% Global definition of granular supervisor info, may not be used directly
+\def\supervisorname#1{\gdef\@supervisorname{#1}}
+\def\supervisordesignation#1{\gdef\@supervisordesignation{#1}}
+\def\supervisordepartment#1{\gdef\@supervisordepartment{#1}}
+
+% Initial value set up for safety
+\supervisorname{\textbf{\textit{(NO SUPERVISOR NAME DEFINED)}}}
+\supervisordesignation{\textbf{\textit{(NO SUPERVISOR DESIGNATION DEFINED)}}}
+\supervisordepartment{\textbf{\textit{(NO SUPERVISOR DEPARTMENT DEFINED)}}}
+
+% Sets up supervisor name, designation, and department in order
+\newcommand*{\supervisor}[3]{%
+    \supervisorname{#1}%
+    \supervisordesignation{#2}%
+    \supervisordepartment{#3}%
+}
+
+% Wrapper command to fetch the name of the supervisor
+\newcommand*{\getsupervisorname}{\@supervisorname}
+
+% Wrapper command to fetch the designation of the supervisor
+\newcommand*{\getsupervisordesignation}{\@supervisordesignation}
+
+% Wrapper command to fetch the department of the supervisor
+\newcommand*{\getsupervisordepartment}{\@supervisordepartment}
+
+% Command to fetch the qualified name of the supervisor
+\newcommand*{\getsupervisorqname}{%
+    \@supervisorname, \@supervisordesignation, \@supervisordepartment%
+}
+
+% Command to fetch the qualified name of the supervisor, name is bold
+\newcommand*{\getsupervisorbqname}{%
+    \textbf{\@supervisorname}, \@supervisordesignation, \@supervisordepartment%
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

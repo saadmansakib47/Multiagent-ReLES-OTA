@@ -1,0 +1,25 @@
+Updated IUT BSc Thesis package
+
+This package updates the original IUT thesis source using:
+1. The provided IEEE VTC 2027 Spring manuscript and its four updated result figures.
+2. The previously audited Multiagent-ReLES-OTA GitHub implementation.
+3. The original IUT BSc thesis template files, preserved without modification.
+
+Major updates:
+- Reframed the thesis around the updated coupled-channel research question.
+- Added the 2x3 architecture-by-conditioning benchmark (IPPO/MAPPO/FP3O x blind/type-conditioned).
+- Added the updated coupled-channel return, interference, shield-rate, and payload figures.
+- Retained selected earlier thesis figures as explicitly labelled historical isolated-channel diagnostics.
+- Added the long-horizon 2,000,897-step validation and its reward-saturation interpretation.
+- Corrected the methodological treatment of agent_id vs semantic ecu_type conditioning.
+- Added a more complete literature review and refreshed the bibliography with validated metadata/DOIs where available.
+- Clarified that the implemented safety filter is CBF-inspired rather than a formal CBF certificate.
+- Added a reproducibility appendix and repository-reconciliation notes.
+
+The original IUT class/style files are unchanged.
+
+Correction on 2026-09-14:
+- The two supplied coupled-channel diagnostic figures were inserted into this previously expanded thesis version, not the original thesis.
+- Renamed figures: coupled_channel_learning_curves.png and coupled_channel_policy_entropy_decay.png.
+- They are placed after the authoritative coupled-channel factorial benchmark and before the Representation Interference analysis.
+- The figures are treated as training-dynamics diagnostics and do not replace the authoritative five-seed benchmark.
