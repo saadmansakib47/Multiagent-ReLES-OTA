@@ -43,7 +43,7 @@ from ota_core import (
 
 # Import config (provides all tunable constants in one place)
 try:
-    from config import SAFETY_CFG, BD_CFG, ECU_CFG
+    from config import SAFETY_CFG, BD_CFG, ECU_CFG, FLEET_PRESETS
 except ImportError:
     # Fallback defaults if run outside the project root
     SAFETY_CFG = {"enabled": True, "memory_budget_frac": 0.85}
@@ -218,6 +218,26 @@ class MultiAgentOTAEnv(ParallelEnv):
             )
             state_parts.append(gateway_load)
         return np.concatenate(state_parts)
+
+
+    def get_fleet_type_distribution(self) -> Dict[str, int]:
+        """Return the count of ECUs for each ECU type in the current fleet."""
+        dist = {t: 0 for t in self.ecu_types_list}
+        for t in self.ecu_types.values():
+            dist[t] = dist.get(t, 0) + 1
+        return dist
+
+    @property
+    def is_bijective_confound(self) -> bool:
+        """
+        Returns True if the fleet exhibits a 1:1 bijection between agent identity
+        and ECU type (e.g. exactly 1 agent per type, allowing shared policies to
+        trivially memorize agent identity from the type vector).
+        Returns False if multiple interchangeable agents exist per type (destroying
+        the bijective identity leakage confound).
+        """
+        counts = self.get_fleet_type_distribution()
+        return max(counts.values()) <= 1
 
     def observation_space(self, agent: str) -> spaces.Dict:
         return self._obs_space
