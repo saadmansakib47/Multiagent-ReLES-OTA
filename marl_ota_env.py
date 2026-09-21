@@ -31,7 +31,7 @@ from pettingzoo.utils import parallel_to_aec
 
 import hashlib
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from ota_core import (
     estimate_delta_size,
@@ -108,6 +108,7 @@ class MultiAgentOTAEnv(ParallelEnv):
         type_conditioning: bool = True,
         coupled_channel: bool = False,
         gateway_bw_mbps: float = 50.0,
+        fleet_preset: Optional[Union[str, int, Dict[str, int]]] = None,
     ):
         super().__init__()
 
@@ -126,13 +127,52 @@ class MultiAgentOTAEnv(ParallelEnv):
         # ECU type labels for FP3O heterogeneous action heads.
         # Valid types: "engine", "braking", "infotainment", "generic"
         self.ecu_types_list = ["engine", "braking", "infotainment", "generic"]
-        self.ecu_types: Dict[str, str] = {
-            f"ecu_{i}": (
-                ecu_types.get(f"ecu_{i}", self.ecu_types_list[i % len(self.ecu_types_list)])
-                if ecu_types else self.ecu_types_list[i % len(self.ecu_types_list)]
-            )
-            for i in range(n_agents)
-        }
+        self.fleet_preset   = fleet_preset
+
+        # Resolve fleet composition from preset, custom dict, or n_agents
+        resolved_types: Dict[str, str] = {}
+        if fleet_preset is not None:
+            if isinstance(fleet_preset, dict):
+                comp = fleet_preset
+            else:
+                try:
+                    comp = FLEET_PRESETS.get(fleet_preset, FLEET_PRESETS.get(str(fleet_preset)))
+                except Exception:
+                    comp = None
+            if comp is not None:
+                remaining = dict(comp)
+                idx = 0
+                while any(v > 0 for v in remaining.values()):
+                    for t in self.ecu_types_list:
+                        if remaining.get(t, 0) > 0:
+                            resolved_types[f"ecu_{idx}"] = t
+                            remaining[t] -= 1
+                            idx += 1
+                n_agents = len(resolved_types)
+
+        if not resolved_types and ecu_types is not None:
+            resolved_types = dict(ecu_types)
+            n_agents = len(resolved_types)
+        elif not resolved_types and n_agents in [4, 8, 12, 16]:
+            comp = FLEET_PRESETS.get(n_agents)
+            if comp is not None:
+                remaining = dict(comp)
+                idx = 0
+                while any(v > 0 for v in remaining.values()):
+                    for t in self.ecu_types_list:
+                        if remaining.get(t, 0) > 0:
+                            resolved_types[f"ecu_{idx}"] = t
+                            remaining[t] -= 1
+                            idx += 1
+
+        if not resolved_types:
+            resolved_types = {
+                f"ecu_{i}": self.ecu_types_list[i % len(self.ecu_types_list)]
+                for i in range(n_agents)
+            }
+
+        self.ecu_types: Dict[str, str] = resolved_types
+        self.n_agents_total = n_agents
 
         # Load network parameters
         # load_bd_params() always merges with safe defaults — safe to call regardless of constrained_network_mode

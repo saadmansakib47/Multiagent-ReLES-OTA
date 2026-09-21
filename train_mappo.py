@@ -37,6 +37,7 @@ import sys
 import torch
 from pathlib import Path
 from collections import defaultdict
+from typing import Optional, Union, Dict, List
 
 if hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -139,6 +140,7 @@ def train_algorithm(
     type_conditioning: bool = True,
     coupled_channel: bool   = False,
     gateway_bw_mbps: float  = 50.0,
+    fleet_preset: Optional[str] = None,
     seed: int               = 42,
 ) -> None:
     """
@@ -223,6 +225,7 @@ def train_algorithm(
             type_conditioning=type_conditioning,
             coupled_channel=coupled_channel,
             gateway_bw_mbps=gateway_bw_mbps,
+            fleet_preset=fleet_preset,
         )
 
     raw_env = make_env()
@@ -350,6 +353,7 @@ def main():
     parser.add_argument("--algorithm",  choices=["ippo", "mappo", "fp3o"], default="fp3o",
                         help="MARL algorithm to train")
     parser.add_argument("--n_agents",   type=int, default=4,       help="Number of ECU agents")
+    parser.add_argument("--fleet_preset", type=str, default=None, help="Fleet composition preset (e.g. balanced_8, safety_heavy_8)")
     parser.add_argument("--n_blocks",   type=int, default=16,      help="Firmware blocks per agent")
     parser.add_argument("--constrained_network_mode",    action="store_true",       help="Enable constrained network parameters")
     parser.add_argument("--safety",     type=lambda x: str(x).lower() == 'true', default=True, help="Enable Safety Shield")

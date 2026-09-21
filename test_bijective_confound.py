@@ -180,5 +180,51 @@ class TestBijectiveConfound(unittest.TestCase):
         print("[PASS] Step 6: Confirmed FP3O specialized head routing consistency across interchangeable ECUs.")
 
 
+
+    def test_varying_fleet_compositions_asymmetric(self):
+        """Verify that asymmetric/heterogeneous fleets (safety-heavy, infotainment-heavy) destroy the confound."""
+        # Safety-heavy ADAS vehicle (3 engine, 3 braking, 1 infotainment, 1 generic)
+        env_safety = MultiAgentOTAEnv(fleet_preset="safety_heavy_8")
+        dist_s = env_safety.get_fleet_type_distribution()
+        self.assertEqual(dist_s["engine"], 3)
+        self.assertEqual(dist_s["braking"], 3)
+        self.assertEqual(dist_s["infotainment"], 1)
+        self.assertEqual(dist_s["generic"], 1)
+        self.assertFalse(env_safety.is_bijective_confound)
+
+        # Infotainment-heavy cockpit vehicle (1 engine, 1 braking, 4 infotainment, 2 generic)
+        env_info = MultiAgentOTAEnv(fleet_preset="infotainment_heavy_8")
+        dist_i = env_info.get_fleet_type_distribution()
+        self.assertEqual(dist_i["engine"], 1)
+        self.assertEqual(dist_i["braking"], 1)
+        self.assertEqual(dist_i["infotainment"], 4)
+        self.assertEqual(dist_i["generic"], 2)
+        self.assertFalse(env_info.is_bijective_confound)
+        print("[PASS] Step 7: Confirmed varying asymmetric fleet compositions destroy the 1:1 bijective confound.")
+
+    def test_custom_dict_fleet_composition(self):
+        """Verify arbitrary custom user-specified dictionary fleet compositions."""
+        custom_comp = {"engine": 4, "braking": 2, "infotainment": 1, "generic": 1}
+        env_custom = MultiAgentOTAEnv(fleet_preset=custom_comp)
+        self.assertEqual(env_custom.n_agents_total, 8)
+        self.assertEqual(env_custom.get_fleet_type_distribution(), custom_comp)
+        self.assertFalse(env_custom.is_bijective_confound)
+        print("[PASS] Step 8: Confirmed arbitrary dictionary fleet compositions dynamically resolve and validate.")
+
+    def test_scaled_step_execution_n8_n12(self):
+        """Verify that N=8 and N=12 step executions and coupled channel transmission run without errors."""
+        for n in [8, 12]:
+            env = MultiAgentOTAEnv(n_agents=n, n_blocks=16, coupled_channel=True)
+            obs, _ = env.reset(seed=100)
+            self.assertEqual(len(obs), n)
+            # Perform 5 parallel steps
+            for _ in range(5):
+                actions = {a: env.action_space(a).sample() for a in env.agents}
+                obs, rews, terms, truncs, infos = env.step(actions)
+                if not env.agents:
+                    break
+            self.assertEqual(len(env.possible_agents), n)
+        print("[PASS] Step 9: Confirmed scaled N=8 and N=12 coupled-channel step rollouts execute cleanly.")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

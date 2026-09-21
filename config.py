@@ -21,16 +21,26 @@ ENV_CFG = dict(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1.1 Fleet Compositions (TMLR Non-Bijective Scalability)
+# 1.1 Fleet Compositions (TMLR Non-Bijective & Varying Fleet Scalability)
 # ─────────────────────────────────────────────────────────────────────────────
 # Presets to eliminate the 1:1 bijective identity-to-type confound:
-# - 4 ECUs:  1 per type (Legacy baseline; 1:1 bijection)
-# - 8 ECUs:  2 interchangeable per type (Destroys 1:1 bijection)
-# - 12 ECUs: 3 interchangeable per type (Destroys 1:1 bijection)
+# - Balanced compositions: equal allocation across ECU types
+# - Asymmetric compositions: realistic vehicle variants (Safety-heavy ADAS vs. Cockpit-heavy)
 FLEET_PRESETS = {
+    # Integer aliases
     4:  {"engine": 1, "braking": 1, "infotainment": 1, "generic": 1},
     8:  {"engine": 2, "braking": 2, "infotainment": 2, "generic": 2},
     12: {"engine": 3, "braking": 3, "infotainment": 3, "generic": 3},
+    16: {"engine": 4, "braking": 4, "infotainment": 4, "generic": 4},
+
+    # Named presets (TMLR "varying fleet compositions")
+    "balanced_4":             {"engine": 1, "braking": 1, "infotainment": 1, "generic": 1},
+    "balanced_8":             {"engine": 2, "braking": 2, "infotainment": 2, "generic": 2},
+    "balanced_12":            {"engine": 3, "braking": 3, "infotainment": 3, "generic": 3},
+    "safety_heavy_8":         {"engine": 3, "braking": 3, "infotainment": 1, "generic": 1},
+    "infotainment_heavy_8":   {"engine": 1, "braking": 1, "infotainment": 4, "generic": 2},
+    "powertrain_heavy_12":    {"engine": 5, "braking": 3, "infotainment": 2, "generic": 2},
+    "cockpit_connected_12":   {"engine": 2, "braking": 2, "infotainment": 5, "generic": 3},
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
