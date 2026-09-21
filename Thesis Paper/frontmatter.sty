@@ -1,0 +1,138 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{frontmatter}[2023/06/21 v0.1 LaTeX package to work with iutbscthesis class and provide commands for generating front matter texts]
+
+% Command for Coverpage
+\newcommand*{\coverpage}{%
+\pagenumbering{gobble}%
+\begin{center}%
+    \textbf{\MakeUppercase{\@program}}%
+    \vfill%
+    \textbf{\@title}%
+    \vfill%
+    \foreach \authorinfo in \authorlist {%
+        \textbf{\getauthorname{\authorinfo}}\\%
+        \textbf{\getauthorid{\authorinfo}}\\%
+    }%
+
+    \vfill%
+
+    %\textbf{Department of Computer Science and Engineering}\\
+    \textbf{\@department}\\%
+    Islamic University of Technology\\%
+    \getdatemy%
+\end{center}
+\clearpage
+}
+
+% Command for Titlepage
+\renewcommand*{\titlepage}{%
+\thispagestyle{empty}
+\begin{center}
+    % \textbf{\MakeUppercase{\@program}}
+    % \vfill
+    \textbf{\@title}
+    \vfill
+    \foreach \authorinfo in \authorlist {
+        \textbf{\getauthorname{\authorinfo}}\\
+        \textbf{\getauthorid{\authorinfo}}\\
+    }
+
+    \vfill
+
+    %\textbf{Department of Computer Science and Engineering}\\
+    \textbf{\@department}\\
+    Islamic University of Technology\\
+    \getdatemy
+\end{center}
+\clearpage
+}
+
+% Command for Declaration of Candidate. Optional argument controls the
+% ratio of the columns, where the value is the ratio taken by the supervisor
+% and co-supervisor column
+% (The length is used for auto calculating the width of the author column)
+\newlength{\authcolwidth}
+\newcommand*{\declarationofcandidate}[1][0.65]{%
+    \setlength{\authcolwidth}{\dimexpr\textwidth-#1\textwidth}
+    \begin{center}
+        \Large{\textbf{Declaration of Candidate}}
+    \end{center}
+    %
+    \noindent This is to certify that the work presented in this thesis is the outcome of the analysis and experiments carried out by \authorbnametoclause\ under the supervision of \getsupervisorbqname \ifhascosupervisor{\ and co-supervision of \cosupervisorbqnametoclause ,}{,} Islamic University of Technology, Dhaka, Bangladesh. It is also declared that neither this thesis nor any part of it has been submitted anywhere else for any degree or diploma. Information derived from the published and unpublished work of others have been acknowledged in the text and a list of references is given.
+    %
+    \begin{table}[htbp]
+        \centering
+        \begin{tabular}{p{#1\textwidth} p{\authcolwidth}}
+            \vspace{5ex}{\ }\newline
+            \rule{4cm}{0.4pt}\newline
+            \textbf{\getsupervisorname}\newline
+            \getsupervisordesignation\newline
+            \getsupervisordepartment\newline
+            Islamic University of Technology (IUT)\newline
+            Date: \getdatemdy
+            \ifhascosupervisor{%
+                \foreach \cosupinfo in \cosupervisorlist {%     
+                    \vspace{5ex}{\ }\newline
+                    \rule{4cm}{0.4pt}\newline
+                    \textbf{\getcosupervisorname{\cosupinfo}}\newline
+                    \getcosupervisordesignation{\cosupinfo}\newline
+                    \getcosupervisordepartment{\cosupinfo}\newline
+                    Islamic University of Technology (IUT)\newline
+                    Date: \getdatemdy
+                }
+            }{}
+            &
+            \foreach \authorinfo in \authorlist {
+                \vspace{5ex}{\ }\newline
+                \rule{4cm}{0.4pt}\newline
+                \textbf{\getauthorname{\authorinfo}}\newline
+                Student ID: \getauthorid{\authorinfo}\newline
+                Date: \getdatemdy
+            }
+        \end{tabular}
+    \end{table}
+    \clearpage
+}
+
+% Dedication command
+\newcommand{\dedicatedto}[1]{
+\vspace*{\fill}
+\begin{center}
+    \begin{Large}
+        \textit{Dedicated to #1}
+    \end{Large}
+\end{center}
+\vfill
+\clearpage
+}
+
+% List of Abbreviation Environment and corresponding commands
+\newenvironment{abbreviations}{
+    {\centering\Large \textbf{List of Abbreviations}\\}\vspace{\baselineskip}
+    \begin{center}
+    \begin{tabular}{l l}
+}
+{
+    \end{tabular}
+    \end{center}
+    \clearpage
+}
+
+\newcommand{\abbr}[2]{\textbf{#1} & {#2}\\}
+
+
+% Acknowledgement Environment
+\newenvironment{acknowledgement}{
+    {\centering\Large \textbf{Acknowledgement}\\}\vspace{\baselineskip}
+}
+{
+    \clearpage
+}
+
+% Abstract Environment
+\renewenvironment{abstract}{
+    {\centering\Large \textbf{Abstract}\\}\vspace{\baselineskip}
+}
+{
+    \clearpage
+}
