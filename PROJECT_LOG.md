@@ -74,6 +74,23 @@ To ensure all future developers and coding agents can continuously verify that t
 All existing unit tests in `test_marl_env.py` also passed 100% (5/5 suites).
 
 ---
+
+### 5. Hardware Constraints, Loadshedding Realities & The 3-Tier Zero-Data-Loss Architecture
+
+**The Problem**:
+1. **Laptop Thermal Emergency Cutoff**: Extended MARL training across multiple vectorized environments pushes laptop CPU cores to 100% continuous load in confined thermal chambers. Without active desktop-grade cooling, CPU/VRMs exceed thermal trip thresholds (95°C–105°C), triggering abrupt hardware shutdowns that terminate the Python process and lose uncommitted training state.
+2. **Regional Power Outage (Loadshedding)**: Running on a desktop (equipped with an NVIDIA RTX 3060 GPU) resolves thermal throttling and accelerates neural policy updates, but desktop workstations lack battery backup. Sudden loadshedding cuts wall power instantly.
+3. **Monolithic Multi-Seed Failure Mode**: In standard naive training loops, if power drops at Seed 8 or Seed 9 of a 10-seed batch, all progress from earlier seeds can be lost or left unregistered, wasting hours of compute.
+
+**The Solution: 3-Tier Fault-Tolerant Architecture**:
+
+| Tier | Mechanism | Failure Mode Prevented | Implementation Strategy |
+| :--- | :--- | :--- | :--- |
+| **Tier 1** | **Atomic Seed-Level Persistence** | Loss of previously completed seeds when a subsequent seed crashes or loses power. | Each seed runs as an isolated atomic unit. Upon completion, metrics, evaluation returns, and policy weights are saved to disk and registered in `benchmark_tracker.json`. Re-running the benchmark checks the tracker and skips already-completed seeds. |
+| **Tier 2** | **Periodic Intra-Seed Checkpointing** | Losing hours of progress within a single long-running seed if power cuts mid-training. | Implements a step-frequency callback (saving every 10,000 steps to `checkpoints/ckpt_seed_{s}_step_{k}.zip`). At most a few minutes of training steps are lost in a sudden power cut. |
+| **Tier 3** | **Graceful Pause & Auto-Resume** | File corruption on sudden SIGINT (`Ctrl+C`) or inability to pause before anticipated loadshedding. | 1) A `SIGINT` handler flushes buffers, writes an emergency checkpoint, and exits cleanly. 2) A dynamic `pause.flag` watcher enables non-destructive pausing. 3) A `--resume` CLI flag automatically loads the latest valid checkpoint and continues training seamlessly. |
+
+---
 ## 2026-09-11 (Phase 8) — 5-Seed Coupled Channel Benchmark & Representation Interference Analysis
 
 **Context**: Scaling the empirical evaluation from 2-seed pilot runs to an authoritative 5-seed benchmark (100,353 timesteps, 4 agents, 16 blocks, 25 Mbps gateway bandwidth) across the complete $2 \times 3$ factorial matrix (`{IPPO, MAPPO, FP3O}` $\times$ `{Blind, Type-Conditioned}`). Investigating the structural impact of type conditioning under shared gateway contention and evaluating autonomous policy safety.
