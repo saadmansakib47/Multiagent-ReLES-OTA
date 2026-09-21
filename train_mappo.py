@@ -142,6 +142,8 @@ def train_algorithm(
     gateway_bw_mbps: float  = 50.0,
     fleet_preset: Optional[str] = None,
     seed: int               = 42,
+    save_path: Optional[str] = None,
+    return_model: bool      = False,
 ) -> None:
     """
     Train Independent PPO (IPPO) on the multi-agent OTA env.
@@ -326,8 +328,9 @@ def train_algorithm(
     elapsed = time.time() - t0
 
     tag = "bd" if constrained_network_mode else "generic"
-    model.save(f"{save_dir}/{algorithm}_{tag}_final")
-    print(f"\n  Training done in {elapsed:.1f}s  →  saved to {save_dir}/{algorithm}_{tag}_final")
+    actual_save_path = save_path if save_path else f"{save_dir}/{algorithm}_{tag}_final"
+    model.save(actual_save_path)
+    print(f"\n  Training done in {elapsed:.1f}s  →  saved to {actual_save_path}")
 
     # ── Extract final training-time ep_rew_mean from VecMonitor buffer ──────
     # ep_info_buffer is a deque populated by VecMonitor with dicts {r, l, t}.
@@ -339,6 +342,8 @@ def train_algorithm(
         print(f"  Training-time ep_rew_mean (last {len(model.ep_info_buffer)} eps): {train_mean_return:.2f}")
 
     env.close()
+    if return_model:
+        return model, train_mean_return
     return train_mean_return
 
 

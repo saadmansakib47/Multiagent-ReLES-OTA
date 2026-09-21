@@ -86,7 +86,7 @@ All existing unit tests in `test_marl_env.py` also passed 100% (5/5 suites).
 
 | Tier | Mechanism | Failure Mode Prevented | Implementation Strategy |
 | :--- | :--- | :--- | :--- |
-| **Tier 1** | **Atomic Seed-Level Persistence** | Loss of previously completed seeds when a subsequent seed crashes or loses power. | Each seed runs as an isolated atomic unit. Upon completion, metrics, evaluation returns, and policy weights are saved to disk and registered in `benchmark_tracker.json`. Re-running the benchmark checks the tracker and skips already-completed seeds. |
+| **Tier 1** | **Atomic Seed-Level Persistence** | Loss of previously completed seeds when a subsequent seed crashes or loses power. | **COMPLETED & VERIFIED**: Implemented `tools/seed_tracker.py` and `tools/benchmark_runner.py`. Every seed writes atomically (via tempfile rename). Re-running skips completed seeds instantly. Model artifacts verified on disk. |
 | **Tier 2** | **Periodic Intra-Seed Checkpointing** | Losing hours of progress within a single long-running seed if power cuts mid-training. | Implements a step-frequency callback (saving every 10,000 steps to `checkpoints/ckpt_seed_{s}_step_{k}.zip`). At most a few minutes of training steps are lost in a sudden power cut. |
 | **Tier 3** | **Graceful Pause & Auto-Resume** | File corruption on sudden SIGINT (`Ctrl+C`) or inability to pause before anticipated loadshedding. | 1) A `SIGINT` handler flushes buffers, writes an emergency checkpoint, and exits cleanly. 2) A dynamic `pause.flag` watcher enables non-destructive pausing. 3) A `--resume` CLI flag automatically loads the latest valid checkpoint and continues training seamlessly. |
 
