@@ -144,6 +144,9 @@ def train_algorithm(
     seed: int               = 42,
     save_path: Optional[str] = None,
     return_model: bool      = False,
+    checkpoint_freq: int    = 10_000,
+    checkpoint_dir: Optional[str] = None,
+    resume_from_checkpoint: Optional[str] = None,
 ) -> None:
     """
     Train Independent PPO (IPPO) on the multi-agent OTA env.
@@ -212,7 +215,35 @@ def train_algorithm(
             self._total_steps   = 0
 
 
-    print(f"\n Training {algorithm.upper()} on MultiAgentOTAEnv")
+    # -- Tier-2: Periodic Intra-Seed Step Checkpoint -----------------------
+    class StepCheckpointCallback(BaseCallback):
+        """
+        Saves model weights every `save_freq` env steps.
+        File: <checkpoint_dir>/seed_{seed_id}_step_{n}.zip
+        VecNormalize stats saved alongside as <stem>_vecnorm.pkl.
+        Runner auto-detects latest checkpoint and passes it as
+        resume_from_checkpoint so training resumes without data loss.
+        """
+        def __init__(self, save_freq: int, ckpt_dir, seed_id: int):
+            super().__init__(verbose=0)
+            self._save_freq = save_freq
+            self._ckpt_dir  = Path(ckpt_dir)
+            self._ckpt_dir.mkdir(parents=True, exist_ok=True)
+            self._seed_id   = seed_id
+            self._last_save = 0
+
+        def _on_step(self) -> bool:
+            n = self.model.num_timesteps
+            if n - self._last_save >= self._save_freq:
+                stem = self._ckpt_dir / f"seed_{self._seed_id}_step_{n}"
+                self.model.save(str(stem))
+                if hasattr(self.training_env, "save"):
+                    self.training_env.save(str(stem) + "_vecnorm.pkl")
+                print(f"  [ckpt] Checkpoint at step {n:,} -> {stem}.zip")
+                self._last_save = n
+            return True
+
+        print(f"\n Training {algorithm.upper()} on MultiAgentOTAEnv")
     print(f"   n_agents={n_agents}, n_blocks={n_blocks}, constrained_network_mode={constrained_network_mode}, safety={safety}")
     print(f"   total_timesteps={total_timesteps:,}, n_envs={n_envs}, n_steps={n_steps}, batch_size={batch_size}")
 
@@ -319,12 +350,42 @@ def train_algorithm(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+    # -- Tier-2 resume ---------------------------------------------------
+    _steps_done = 0
+    if resume_from_checkpoint and Path(resume_from_checkpoint).exists():
+        print(f"  [tier2] Resuming from: {resume_from_checkpoint}")
+        model = PPO.load(resume_from_checkpoint, env=env, device=selected_device)
+        vecnorm_pkl = str(Path(resume_from_checkpoint).with_suffix("")) + "_vecnorm.pkl"
+        if Path(vecnorm_pkl).exists():
+            from stable_baselines3.common.vec_env import VecNormalize as _VN
+            _w = env
+            while hasattr(_w, "venv"):
+                if isinstance(_w, _VN):
+                    _w.load_running_average(vecnorm_pkl)
+                    print(f"  [tier2] VecNormalize stats restored from {vecnorm_pkl}")
+                    break
+                _w = _w.venv
+        _steps_done = model.num_timesteps
+        print(f"  [tier2] Resuming at step {_steps_done:,} ({total_timesteps-_steps_done:,} remaining)")
+    _remaining = max(0, total_timesteps - _steps_done)
+
     print(f"\n  Starting {algorithm.upper()} training on {selected_device}...")
     t0 = time.time()
+    _ckpt_dir_resolved = checkpoint_dir or f"{save_dir}/checkpoints"
     callback = CallbackList([
         InvalidActionRateCallback(),
+        StepCheckpointCallback(
+            save_freq=checkpoint_freq,
+            ckpt_dir=_ckpt_dir_resolved,
+            seed_id=seed,
+        ),
     ])
-    model.learn(total_timesteps=total_timesteps, progress_bar=True, callback=callback)
+    model.learn(
+        total_timesteps=_remaining,
+        progress_bar=True,
+        callback=callback,
+        reset_num_timesteps=(_steps_done == 0),
+    )
     elapsed = time.time() - t0
 
     tag = "bd" if constrained_network_mode else "generic"

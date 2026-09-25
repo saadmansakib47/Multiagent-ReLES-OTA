@@ -99,7 +99,9 @@ def run_seed_benchmark(
     coupled_channel: bool = True,
     gateway_bw_mbps: float = 25.0,
     save_models_dir: str = "results/models",
-    tracker: SeedTracker = None
+    tracker: SeedTracker = None,
+    checkpoint_freq: int = 10_000,
+    checkpoint_dir: str = "results/checkpoints",
 ) -> None:
     if tracker is None:
         tracker = SeedTracker()
@@ -129,6 +131,17 @@ def run_seed_benchmark(
         model_path = models_dir / model_filename
 
         try:
+            # -- Tier-2: Find latest step checkpoint for this seed -------
+            _ckpt_dir = Path(checkpoint_dir)
+            _existing = sorted(
+                _ckpt_dir.glob(f"seed_{seed}_step_*.zip"),
+                key=lambda p: int(p.stem.split("_step_")[1])
+            ) if _ckpt_dir.exists() else []
+            _resume_path = str(_existing[-1]) if _existing else None
+            if _resume_path:
+                _rs = int(Path(_resume_path).stem.split("_step_")[1])
+                print(f"  [tier2] Checkpoint found at step {_rs:,} -> will resume")
+
             # Execute training with this specific seed
             model, _ = train_algorithm(
                 algorithm=algo.lower(),
@@ -144,6 +157,9 @@ def run_seed_benchmark(
                 save_path=str(model_path),
                 return_model=True,
                 device="auto",
+                checkpoint_freq=checkpoint_freq,
+                checkpoint_dir=str(_ckpt_dir),
+                resume_from_checkpoint=_resume_path,
             )
 
             # Evaluate policy
@@ -208,6 +224,10 @@ def main():
     parser.add_argument("--coupled", action="store_true", default=True)
     parser.add_argument("--matrix", action="store_true", help="Run the full 2x3 factorial benchmark")
     parser.add_argument("--status", action="store_true", help="Print benchmark progress status")
+    parser.add_argument("--checkpoint_freq", type=int, default=10_000,
+                        help="Save step checkpoint every N steps (Tier 2)")
+    parser.add_argument("--checkpoint_dir", type=str, default="results/checkpoints",
+                        help="Directory for Tier 2 step checkpoints")
 
     args = parser.parse_args()
 
@@ -236,6 +256,8 @@ def main():
                 timesteps=args.timesteps,
                 coupled_channel=args.coupled,
                 tracker=tracker,
+                checkpoint_freq=args.checkpoint_freq,
+                checkpoint_dir=args.checkpoint_dir,
             )
     else:
         run_seed_benchmark(
@@ -247,6 +269,8 @@ def main():
             timesteps=args.timesteps,
             coupled_channel=args.coupled,
             tracker=tracker,
+            checkpoint_freq=args.checkpoint_freq,
+            checkpoint_dir=args.checkpoint_dir,
         )
 
 
