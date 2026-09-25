@@ -188,6 +188,10 @@ def run_seed_benchmark(
             print(f"[{seed+1}/{n_seeds}] [DONE] Seed {seed} completed & saved to {model_path}!")
             print(f"       Mean Return: {metrics['mean_return']:.2f} | Shield Rate: {metrics['shield_rate']*100:.1f}% | Payload: {metrics['mean_payload']:.1f} B")
 
+        except KeyboardInterrupt:
+            # Tier-3: user pressed Ctrl+C, emergency checkpoint already saved.
+            print(f"\n[PAUSED] Seed {seed} paused. Re-run to resume from last checkpoint.")
+            return  # Stop run; Tier-1 keeps this seed as "started"
         except Exception as e:
             print(f"\n[ERROR] Seed {seed} encountered an error: {e}")
             raise e

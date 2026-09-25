@@ -739,3 +739,47 @@ Re-run benchmark_runner.py
 ```
 
 **NOTE for future agents:** After any changes to `train_algorithm()` signature or the SB3 `model.learn()` call, run `python -m py_compile train_mappo.py` to verify syntax, then test with a short run using `--timesteps 5000 --checkpoint_freq 2000` to confirm checkpoints are generated and resume logic activates.
+
+---
+### [2026-09-25] Tier 3 Implementation: Graceful Pause & Auto-Resume (SIGINT Handler)
+
+**Status:** COMPLETE
+
+**Files Modified:**
+- `train_mappo.py` (+50 lines)
+- `tools/benchmark_runner.py` (+4 lines)
+
+**Design:**
+Tier 3 adds a `GracefulPauseCallback(BaseCallback)` class (defined inside `train_algorithm`, alongside the Tier-2 `StepCheckpointCallback`) that intercepts Ctrl+C without corrupting training state.
+
+**How it works:**
+1. On init, registers a `signal.SIGINT` handler that sets a `threading.Event` (`_stop_event`).
+2. `_on_step()` checks that event every step — if set, flips `_paused=True` and returns `False`, which signals SB3 to exit `model.learn()` cleanly after the current rollout step (no torn writes, no corrupt state).
+3. After `model.learn()` returns, `train_algorithm()` checks `_pause_cb.was_paused`:
+   - Saves `seed_{seed}_step_{n}.zip` (emergency checkpoint, same naming as Tier 2)
+   - Saves `_vecnorm.pkl` VecNormalize stats alongside
+   - Prints: "Re-run benchmark_runner.py to resume -- Tier 2 will pick this up automatically."
+   - Raises `KeyboardInterrupt` so `benchmark_runner.py` does NOT mark the seed as completed.
+4. `benchmark_runner.py` catches `KeyboardInterrupt` in its per-seed `try/except`, prints `[PAUSED]`, and returns cleanly (Tier-1 status stays "started").
+
+**Windows compatibility:** Python on Windows delivers Ctrl+C as SIGINT to the main thread — this is fully supported.
+
+**Full 3-Tier flow on Ctrl+C:**
+```
+User presses Ctrl+C at step 37,500 (seed 5)
+  -> [tier3] message printed, _stop_event set
+  -> Current rollout step completes normally (no corruption)
+  -> model.learn() exits
+  -> Emergency checkpoint: seed_5_step_37500.zip saved
+  -> KeyboardInterrupt raised
+  -> benchmark_runner: [PAUSED] Seed 5 paused.
+  -> Tier-1 tracker: seed 5 still "started"
+
+User re-runs benchmark_runner.py later:
+  -> Tier-1: seed 5 is "started" -> execute it
+  -> Tier-2: finds seed_5_step_37500.zip -> resumes
+  -> Trains remaining steps, then Tier-1 marks complete
+  -> ZERO data loss
+```
+
+**NOTE for future agents:** `GracefulPauseCallback` MUST remain the last entry in `CallbackList` so it gets `_on_step` called after the other callbacks. Do not reorganize the callback order. After any changes to the callback list, run `python -m py_compile train_mappo.py` to verify.
