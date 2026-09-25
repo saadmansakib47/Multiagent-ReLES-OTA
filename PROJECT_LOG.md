@@ -697,3 +697,45 @@ Use this template for future entries:
 
 #### Notes
 - Any design decisions, caveats, or follow-up work
+
+---
+### [2026-09-25] Tier 2 Implementation: Periodic Intra-Seed Step Checkpointing
+
+**Status:** COMPLETE
+
+**Files Modified:**
+- `train_mappo.py` (+61 lines)
+- `tools/benchmark_runner.py` (+28 lines)
+
+**Changes in `train_mappo.py`:**
+1. **New parameters in `train_algorithm()`:**
+   - `checkpoint_freq: int = 10_000` – save a checkpoint every N env steps
+   - `checkpoint_dir: Optional[str] = None` – defaults to `{save_dir}/checkpoints`
+   - `resume_from_checkpoint: Optional[str] = None` – path to a `.zip` checkpoint to resume from
+
+2. **New `StepCheckpointCallback(BaseCallback)`** class (defined inside `train_algorithm`):
+   - Calls `model.save(stem)` whenever `num_timesteps - last_save >= save_freq`
+   - Filename format: `seed_{seed_id}_step_{n}.zip`
+   - Also saves VecNormalize running statistics alongside: `seed_{seed_id}_step_{n}_vecnorm.pkl`
+
+3. **Resume logic before `model.learn()`:**
+   - If `resume_from_checkpoint` path exists: loads model via `PPO.load()`, restores VecNormalize stats
+   - Computes `_steps_done = model.num_timesteps`, trains only `_remaining = total_timesteps - _steps_done`
+   - Passes `reset_num_timesteps=False` so SB3 internal counter continues correctly
+
+**Changes in `tools/benchmark_runner.py`:**
+1. `run_seed_benchmark()` gains `checkpoint_freq` and `checkpoint_dir` params
+2. Before each seed's `train_algorithm()` call, scans `checkpoint_dir/seed_{seed}_step_*.zip` for the latest checkpoint and passes it as `resume_from_checkpoint` - zero programmer action required on restart
+3. CLI gains `--checkpoint_freq` (default 10000) and `--checkpoint_dir` (default `results/checkpoints`)
+
+**Resume Flow (fully automatic):**
+```
+Power cut at step 23,000 during seed 3
+  -> checkpoints/seed_3_step_20000.zip + seed_3_step_20000_vecnorm.pkl saved
+Re-run benchmark_runner.py
+  -> Tier 1 sees seed 3 is "started" (not completed) -> executes it
+  -> Tier 2 finds seed_3_step_20000.zip -> passes to train_algorithm
+  -> Training resumes from step 20,000, loses at most 10,000 steps
+```
+
+**NOTE for future agents:** After any changes to `train_algorithm()` signature or the SB3 `model.learn()` call, run `python -m py_compile train_mappo.py` to verify syntax, then test with a short run using `--timesteps 5000 --checkpoint_freq 2000` to confirm checkpoints are generated and resume logic activates.
