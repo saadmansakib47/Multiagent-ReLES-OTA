@@ -1,5 +1,7 @@
 # MA-ReLES-OTA
 
+> **Note**: The Phase 1‑9 engineering logs have been modularized into separate files (`docs/project_logs/phase_1.md` … `phase_9.md`). See the index `docs/project_logs/phases_01_to_09.md` for easy navigation.
+
 ### Multi-Agent Reinforcement Learning for Coordinated Automotive OTA Updates
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
