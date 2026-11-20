@@ -15,8 +15,8 @@ import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from marl_ota_env import MultiAgentOTAEnv
-from fp3o_policy import FP3OPolicy, make_fp3o_policy_kwargs
+from marl_ota.envs import MultiAgentOTAEnv
+from marl_ota.policies import FP3OPolicy, make_fp3o_policy_kwargs
 
 
 BATCH = 32

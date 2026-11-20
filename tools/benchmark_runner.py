@@ -43,8 +43,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools.seed_tracker import SeedTracker
-from train_mappo import train_algorithm
-from marl_ota_env import MultiAgentOTAEnv
+from scripts.train import train_algorithm
+from marl_ota.envs import MultiAgentOTAEnv
 
 
 def evaluate_policy(model, env: MultiAgentOTAEnv, n_eval_episodes: int = 20) -> Dict[str, float]:

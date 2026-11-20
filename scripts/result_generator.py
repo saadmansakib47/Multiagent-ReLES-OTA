@@ -1,11 +1,15 @@
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from ota_env import OTAEnv
+from marl_ota.envs import OTAEnv
 from stable_baselines3 import PPO
-from baselines import BaselineRunner
+from marl_ota.baselines import BaselineRunner
 
 sns.set_style("whitegrid")
 plt.rcParams.update({'font.size': 12})

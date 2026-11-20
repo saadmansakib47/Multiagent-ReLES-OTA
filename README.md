@@ -268,6 +268,18 @@ python tests/test_fp3o.py
 python tests/test_bijective_confound.py
 ```
 
+### 5. Launch Training (CLI)
+
+```bash
+python scripts/train.py --algorithm fp3o --fleet_preset balanced_8
+```
+
+### 6. Launch Web Diagnostic Interface
+
+```bash
+python scripts/web_ui.py
+```
+
 ---
 
 ## Contributors & Roles

@@ -1,11 +1,14 @@
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
 from stable_baselines3.common.logger import configure
-import os
 from pathlib import Path
-from ota_env import OTAEnv
+from marl_ota.envs import OTAEnv
 
 # ====================== CONFIG ======================
 N_BLOCKS = 16 

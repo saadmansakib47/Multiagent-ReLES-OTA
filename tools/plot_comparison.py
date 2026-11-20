@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from config import PATHS_CFG, BENCHMARK_CFG
+from marl_ota.config import PATHS_CFG, BENCHMARK_CFG
 
 CHARTS_DIR = Path(PATHS_CFG["charts_dir"])
 LEADERBOARD = Path(PATHS_CFG["leaderboard_csv"])

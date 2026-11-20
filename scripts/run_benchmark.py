@@ -24,9 +24,13 @@ import pandas as pd
 # pyrefly: ignore [missing-import]
 import scipy.stats as stats
 
-from config import BENCHMARK_CFG, PATHS_CFG, TRAIN_CFG
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from marl_ota.config import BENCHMARK_CFG, PATHS_CFG, TRAIN_CFG
 from tools.training_registry import log_run, print_summary as registry_summary
-from train_mappo import train_algorithm
+from scripts.train import train_algorithm
 from tools.evaluate_marl import evaluate_trained_model, evaluate_all_seeds
 
 

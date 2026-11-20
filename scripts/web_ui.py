@@ -23,7 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = ROOT / "webui"
 RESULTS_DIR = ROOT / "results"
 CHARTS_DIR = RESULTS_DIR / "charts"
@@ -193,7 +193,7 @@ def build_command(payload: dict) -> list[str]:
     command = [
         RUNNER_PYTHON,
         "-u",
-        str(ROOT / "main.py"),
+        str(ROOT / "scripts" / "run_benchmark.py"),
         "--mode",
         mode,
         "--algorithm",

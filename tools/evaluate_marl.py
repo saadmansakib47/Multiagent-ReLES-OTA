@@ -127,7 +127,7 @@ def evaluate_trained_model(
         model_path            : str   — path of the loaded model
         algorithm             : str
     """
-    from marl_ota_env import MultiAgentOTAEnv  # pyrefly: ignore [missing-import]
+    from marl_ota.envs import MultiAgentOTAEnv  # pyrefly: ignore [missing-import]
 
     # ── Load model ──────────────────────────────────────────────────────────
     model, model_path = _load_sb3_model(seed_dir)

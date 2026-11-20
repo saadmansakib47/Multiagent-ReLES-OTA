@@ -30,7 +30,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-from marl_ota_env import MultiAgentOTAEnv
+from marl_ota.envs import MultiAgentOTAEnv
 
 
 # ══════════════════════════════════════════════════════════════

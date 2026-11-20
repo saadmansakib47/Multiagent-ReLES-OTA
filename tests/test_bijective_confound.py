@@ -39,9 +39,9 @@ if hasattr(sys.stdout, 'reconfigure'):
 import numpy as np
 import torch
 import torch.nn as nn
-from marl_ota_env import MultiAgentOTAEnv
-from fp3o_policy import FP3OPolicy, SharedBackbone, make_fp3o_policy_kwargs
-from config import FLEET_PRESETS
+from marl_ota.envs import MultiAgentOTAEnv
+from marl_ota.policies import FP3OPolicy, SharedBackbone, make_fp3o_policy_kwargs
+from marl_ota.config import FLEET_PRESETS
 
 
 class TestBijectiveConfound(unittest.TestCase):
@@ -170,7 +170,7 @@ class TestBijectiveConfound(unittest.TestCase):
         """Verify that interchangeable agents of the same type route to the exact same FP3O specialized head."""
         env8 = MultiAgentOTAEnv(n_agents=8, n_blocks=16)
         
-        from fp3o_policy import ECU_TYPE_TO_IDX
+        from marl_ota.policies import ECU_TYPE_TO_IDX
         idx_0 = ECU_TYPE_TO_IDX[env8.ecu_types["ecu_0"]]
         idx_4 = ECU_TYPE_TO_IDX[env8.ecu_types["ecu_4"]]
         

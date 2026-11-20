@@ -80,7 +80,7 @@ import torch
 import numpy as np
 # pyrefly: ignore [missing-import]
 from gymnasium import spaces
-from fp3o_policy import FP3OPolicy, SharedBackbone, ActionHead, PositionHead
+from marl_ota.policies import FP3OPolicy, SharedBackbone, ActionHead, PositionHead
 
 def test_fp3o_architecture():
     print("\n--- Testing FP3O Specialized Heads & Backbone ---")

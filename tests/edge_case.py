@@ -13,8 +13,8 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from marl_ota_env import MultiAgentOTAEnv
-from config import BD_CFG
+from marl_ota.envs import MultiAgentOTAEnv
+from marl_ota.config import BD_CFG
 import numpy as np
 
 
@@ -26,11 +26,11 @@ def test_edge_case(verbose: bool = True):
         print(f"Edge Case Test: {jitter_ms}ms Monsoon Network Jitter")
         print(f"  Monsoon multiplier override: {multiplier}x")
 
-    env = MultiAgentOTAEnv(n_agents=4, n_blocks=8, bd_mode=True, stochastic_latency=True)
+    env = MultiAgentOTAEnv(n_agents=4, n_blocks=8, constrained_network_mode=True, stochastic_latency=True)
     obs, info = env.reset(seed=1337)
 
     # Override the monsoon multiplier to simulate peak jitter from config
-    env.bd_params["monsoon_multiplier"] = multiplier
+    env.net_params["monsoon_multiplier"] = multiplier
 
     all_rewards = []
     steps = 0

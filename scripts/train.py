@@ -27,12 +27,16 @@ References
 - MARL-CC    (arXiv:2511.17653)
 """
 
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import argparse
 import json
 # pyrefly: ignore [missing-import]
 import numpy as np
 import time
-import sys
 # pyrefly: ignore [missing-import]
 import torch
 from pathlib import Path
@@ -47,7 +51,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 
 # ── Env imports ──
-from marl_ota_env import MultiAgentOTAEnv
+from marl_ota.envs import MultiAgentOTAEnv
 
 
 # ══════════════════════════════════════════════════════════════
@@ -168,7 +172,7 @@ def train_algorithm(
         # pyrefly: ignore [import, missing-import]
         from stable_baselines3.common.callbacks import BaseCallback, CallbackList
         # pyrefly: ignore [import, missing-import]
-        from fp3o_policy import FP3OPolicy, make_fp3o_policy_kwargs
+        from marl_ota.policies import FP3OPolicy, make_fp3o_policy_kwargs
     except ImportError as e:
         print(f"  ❌  Missing dependency: {e}")
         print("  Install with:  pip install supersuit stable-baselines3 sb3-contrib")

@@ -4,7 +4,7 @@ import sys
 # Ensure parent directory is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from marl_ota_env import MultiAgentOTAEnv
+from marl_ota.envs import MultiAgentOTAEnv
 
 def test_shapley_axiom():
     print("Testing Shapley Value Axiom: Efficiency (Sum of parts = Team reward)")

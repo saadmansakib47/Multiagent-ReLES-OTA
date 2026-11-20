@@ -28,7 +28,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from config import PATHS_CFG
+from marl_ota.config import PATHS_CFG
 
 REGISTRY_PATH = Path(PATHS_CFG["training_registry"])
 
