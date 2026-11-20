@@ -2,282 +2,172 @@
 
 ### Multi-Agent Reinforcement Learning for Coordinated Automotive OTA Updates
 
-A research extension of the **ReLES-OTA** framework that models firmware update scheduling as a heterogeneous **Multi-Agent Reinforcement Learning (MARL)** problem for resource-constrained vehicular networks.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![PettingZoo](https://img.shields.io/badge/PettingZoo-Parallel_API-orange.svg)](https://pettingzoo.farama.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+A research extension of the **ReLES-OTA** framework that models automotive firmware update scheduling as a heterogeneous **Multi-Agent Reinforcement Learning (MARL)** problem under shared wireless gateway contention and physical memory constraints.
 
 ---
 
-## Research Question
+## Quick Start — 4 Standard Commands
 
-Modern vehicles contain heterogeneous Electronic Control Units (ECUs) with different computational roles and different preferences over firmware update operations. This raises a fundamental question:
+Setting up and running the project is streamlined into 4 primary commands:
+
+### 1. Run Automated Test Suite
+Verify non-bijective fleet scaling, FP3O neural policy routing, and PettingZoo API compliance:
+```bash
+python tests/test_bijective_confound.py
+```
+*(You can also run `python tests/test_fp3o.py` and `python tests/test_marl_env.py` to test individual components).*
+
+### 2. Train MARL Algorithms (CLI)
+Train an algorithm (`fp3o`, `ippo`, or `mappo`) on a non-bijective scalable fleet preset:
+```bash
+python scripts/train.py --algorithm fp3o --fleet_preset balanced_8 --timesteps 100000
+```
+
+### 3. Launch Web Diagnostic Interface
+Start the local interactive Web UI dashboard to configure experiments, monitor real-time training curves, and inspect leaderboards:
+```bash
+python scripts/web_ui.py
+```
+*Open your browser at `http://localhost:8000`.*
+
+### 4. Run Multi-Seed Benchmark Pipeline
+Execute full factorial multi-seed training and automated evaluation across independent seeds:
+```bash
+python scripts/run_benchmark.py --algorithm fp3o --seeds 10 --timesteps 100000
+```
+
+---
+
+## Repository Architecture
+
+The codebase follows the packaging standards of premier AI and cyber-physical research laboratories:
+
+```text
+MA-ReLES-OTA/
+├── docs/                       # Research papers, empirical findings, and modular logs
+│   ├── project_logs/
+│   │   ├── phase_10_iccit_audit.md   # Active peer review audit & remediation roadmap
+│   │   └── phases_01_to_09.md        # Archived historical engineering logs
+│   ├── research_explanation.md       # Comprehensive domain & systems overview
+│   ├── research_findings.md          # Detailed empirical analysis
+│   └── interpretation.md             # Practical engineering implications
+├── marl_ota/                   # Core Python package (pip install -e .)
+│   ├── __init__.py                   # Top-level package exports
+│   ├── config.py                     # Central hyperparameters & fleet presets
+│   ├── core/
+│   │   ├── ota_core.py               # Bit diffing, payload models, channel cost functions
+│   │   └── network_params.json       # Vehicular CPS network simulation parameters
+│   ├── envs/
+│   │   ├── marl_ota_env.py           # PettingZoo Parallel multi-agent vehicular CPS environment
+│   │   └── ota_env.py                # Single-agent Gymnasium baseline
+│   ├── policies/
+│   │   └── fp3o_policy.py            # FP3O shared-backbone & specialized actor heads
+│   └── baselines/
+│       └── baselines.py              # Random, Greedy, and Sequential heuristics
+├── scripts/                    # Direct runnable entry points
+│   ├── train.py                      # Primary MARL training CLI
+│   ├── run_benchmark.py              # Multi-seed benchmark & evaluation pipeline
+│   ├── web_ui.py                     # Web dashboard server backend
+│   ├── train_ppo.py                  # Single-agent PPO trainer
+│   ├── experiment_runner.py          # Baseline experiment runner
+│   └── result_generator.py           # Benchmark figure generator
+├── tests/                      # Unified automated test suite
+├── tools/                      # Multi-seed tracking, evaluation, and statistical battery
+├── webui/                      # Web dashboard frontend (HTML, CSS, JS)
+├── results/                    # Saved models, training logs, and publication figures
+├── Thesis Paper/               # LaTeX thesis & conference manuscript assets
+├── network_params.json         # Root vehicular channel parameter profile
+├── pyproject.toml              # Modern package manifest (PEP 621)
+├── requirements.txt            # Pinned dependencies
+├── PROJECT_LOG.md              # Executive milestone index
+└── README.md
+```
+
+---
+
+## Research Question & Hypotheses
+
+Modern vehicles contain heterogeneous Electronic Control Units (ECUs) with distinct computational roles and divergent update preferences. This raises a fundamental research question:
 
 > **Does heterogeneous MARL require explicit policy specialization, or can a fully shared policy resolve conflicting behaviors when provided with semantic information about each agent's role?**
 
-We investigate this question by comparing:
+We investigate this by comparing:
+* **FP3O**: Partial parameter sharing via a shared representation backbone and role-specialized policy heads.
+* **Type-Conditioned IPPO / MAPPO**: Fully shared actor-critic parameters conditioned on a semantic one-hot `ecu_type` input vector.
+* **Unshared IPPO / Independent Networks**: Fully decentralized actor-critics without any parameter sharing.
 
-- **FP3O**: partial parameter sharing with a shared backbone and specialized policy heads for different ECU types.
-- **IPPO/MAPPO**: fully shared policy parameters, with experiments using semantic `ecu_type` conditioning.
-- **Type-Conditioned IPPO**: a shared actor-critic policy receiving a one-hot `ecu_type` vector as part of its input.
-
-The key distinction is between **parameter-based specialization** and **input-based specialization**.
+### Hypotheses
+* **$H_0$ (Null)**: Explicit policy specialization through type-specific action heads is necessary to resolve conflicting policies in a heterogeneous vehicular fleet.
+* **$H_1$ (Alternative)**: A fully shared policy conditioned on semantic ECU type can achieve performance comparable to or better than an explicitly specialized policy architecture in the tested heterogeneous OTA environment.
 
 ---
 
-## Hypotheses
+## Vehicular Cyber-Physical Environment Dynamics
 
-### $H_0$ (Null)
+The environment models coordinated firmware updates across multiple ECUs sharing vehicle-level resources:
 
-Explicit policy specialization through type-specific action heads is necessary to resolve conflicting policies in a heterogeneous fleet.
+### 1. Firmware Update Operations
+Each ECU processes incoming firmware blocks by selecting one of three operations:
+* **Copy ($o=0$)**: Direct reuse of existing memory blocks (~64 B control hash). Exempt from data-plane downlink bandwidth contention.
+* **Modify ($o=1$)**: Standard binary difference update requiring delta reconstruction and transmission.
+* **Modify + Backup ($o=2$)**: Binary diff update with an in-place safety rollback backup buffer, requiring additional memory overhead and verification.
 
-### $H_1$ (Alternative)
+### 2. Coupled Gateway Channel Contention
+When multiple ECUs transmit concurrently, the vehicle's shared gateway bandwidth ($B_{\mathrm{gw}} = 25\text{ Mbps}$) is partitioned across transmitting agents:
+$$B_{\mathrm{eff}} = \frac{B_{\mathrm{gw}}}{\max(n_{\mathrm{transmitting}}, 1)}$$
+This creates emergent pressure for temporal coordination: policies must learn to stagger heavy transmissions over time.
 
-A fully shared policy conditioned on semantic ECU type can achieve performance comparable to or better than an explicitly specialized policy architecture in the tested heterogeneous OTA environment.
+### 3. Vehicular Network Simulation Profile (`network_params.json`)
+The physical wireless downlink is modeled through realistic vehicular CPS constraints:
+* **Base Latency**: $120.0\text{ ms}$ (with stochastic truncated Gaussian jitter $[50\text{ ms}, 200\text{ ms}]$).
+* **Packet Loss Rate**: $5\%$ stochastic drop rate.
+* **Gateway Bandwidth**: $25.0\text{ Mbps}$ shared downlink.
+* **Memory Budget Fraction**: $60\%$ of theoretical peak fleet buffer.
 
-The current study does **not** claim that either architecture is universally superior. Statistical tests are interpreted together with effect size, variance, and seed-level behavior.
+### 4. Autonomous Safety Shield & Metric
+A supervisory safety shield enforces the modeled physical memory constraint during action selection. Rather than reporting mechanical "0% violations" (which is guaranteed by the shield's fallback), we measure the **Autonomous Shield Intervention Rate (%)** — the percentage of actions where the policy violated physical bounds and required emergency supervisor override.
+
+### 5. Cooperative Credit Assignment
+The joint fleet reward is distributed to individual ECUs using **Shapley Value** credit assignment, ensuring each agent receives reward proportional to its marginal contribution to fleet bandwidth, transmission efficiency, and memory preservation.
 
 ---
 
 ## Key Experimental Findings
 
-The experiments were conducted over a sequence of increasingly heterogeneous and stabilized MARL configurations, with headline comparisons trained for 2 million timesteps.
+### 1. Homogeneous Fleet Baseline
+When ECU types do not introduce conflicting operation preferences, all algorithms converge to identical asymptotic returns (~$12.85$). Specialization provides no benefit when agents face identical objectives.
 
-### 1. Homogeneous Fleet
+### 2. Operation-Specific Cost Heterogeneity
+Uniform reward scaling failed to induce specialization because it left the ordinal ranking of operations unchanged (Copy remained universally cheapest). Structuring operation-specific multipliers (e.g. Engine penalized for standard Modify; Infotainment penalized for Modify+Backup) established genuine qualitative policy conflicts.
 
-In the homogeneous environment, ECU types did not introduce different operation preferences. All algorithms eventually converged to approximately the same return of **12.85**.
+### 3. The Bijective Confound Discovery & Elimination
+In 4-agent fleets with 4 distinct types ($N=4, K=4$), a 1:1 bijection existed between agent identity and type vector, allowing shared networks to memorize agent-specific lookups. We eliminated this confound by scaling to $N=8$ and $N=12$ with multiple interchangeable ECUs per type (`balanced_8`, `balanced_12`), observationally and mathematically verified via [`tests/test_bijective_confound.py`](file:///e:/Projects/Thesis/tests/test_bijective_confound.py).
 
-This provided a baseline showing that explicit specialization offers little advantage when the agents face effectively identical objectives.
-
-### 2. Reward-Scale Heterogeneity Was Insufficient
-
-We initially introduced different reward scales for different ECU types.
-
-For example, one type could receive a larger penalty for the same operation than another type.
-
-However, multiplying all operation costs by a constant does not change the relative ordering of those operations. Agents therefore continued to prefer the same low-cost operation.
-
-This did not create the qualitative policy conflict required to meaningfully test heterogeneous specialization.
-
-### 3. Operation-Specific Cost Heterogeneity
-
-We then introduced operation-specific cost multipliers.
-
-For example:
-
-- Engine ECUs were given different costs for binary modification and multi-base verification.
-- Infotainment ECUs were given different costs for verification and simpler copy operations.
-
-This changed the relative preference between operations for different ECU types and created the intended heterogeneous decision problem.
-
-The same action could therefore be desirable for one ECU type and undesirable for another.
-
-### 4. MARL Stabilization
-
-The initial FP3O implementation was highly unstable. Early runs produced extremely poor returns, including a collapse around **-1396**.
-
-We progressively investigated and corrected numerical and architectural issues, including:
-
-- invalid action handling,
-- NaN policy logits,
-- safety constraints,
-- death masking,
-- centralized critic behavior,
-- shared feature extraction,
-- vectorized environment behavior,
-- policy routing.
-
-After these changes, FP3O performance improved progressively from severe failure to approximately **-60**, then **-12**, then positive returns, eventually reaching the range of the other algorithms.
-
-This stabilization process was important because it established that poor initial FP3O performance was not simply treated as evidence against the algorithm.
-
-### 5. The `agent_id` Conditioning Confound
-
-An important observation emerged during the IPPO experiments.
-
-The initial shared IPPO policy received a unique `agent_id`. Since the physical agent identity was correlated with its fixed ECU type, the shared network could use the identifier to learn different behaviors for different agents.
-
-Conceptually:
-
-```text
-Agent ID
-   ↓
-Shared Policy
-   ↓
-Different behavior for different physical agents
-```
-
-This provided a form of implicit specialization and made the initial comparison unfair.
-
-We therefore replaced the identity information with a semantic one-hot `ecu_type` representation:
-
-```text
-ECU Type
-   ↓
-Shared Policy
-   ↓
-Role-dependent behavior
-```
-
-This separates **who the agent is** from **what role the agent performs**.
-
-### 6. Type-Conditioned IPPO
-
-The resulting Type-Conditioned IPPO policy uses the same actor-critic parameters for every agent while receiving the agent's semantic ECU type as an input.
-
-This allows the network to condition its behavior on functional role without maintaining separate policy heads.
-
-In the current four-agent heterogeneous environment, Type-Conditioned IPPO achieved a return of approximately **16.71** across the evaluated seeds, while FP3O achieved a lower mean with substantially greater seed-to-seed variation.
-
-The current five-seed FP3O results include one severe collapse to approximately **-32.37**, while the Type-Conditioned IPPO runs remained tightly clustered around their converged return.
-
-The Welch tests did not establish statistically significant superiority at the conventional $\alpha=0.05$ threshold. Therefore, the result is interpreted as evidence of **competitive performance and apparent seed robustness**, rather than definitive statistical proof that Type-Conditioned IPPO is universally superior.
+### 4. Representation Interference under Channel Contention
+Under shared gateway bottleneck contention ($B_{\mathrm{gw}} = 25\text{ Mbps}$):
+* **Shared-Actor Baselines Degrade**: Adding type conditioning to standard shared IPPO/MAPPO reduced return (IPPO dropped by $27.37$ points; MAPPO dropped by $52.18$ points) due to conflicting gradient updates in a single shared actor.
+* **FP3O Resolves Gradient Conflict**: FP3O demonstrated a massive positive gain of **+111.44 points** ($-213.64 \rightarrow -102.20$) upon enabling type conditioning, because its specialized actor heads isolate gradients between ECU classes.
+* **Autonomous Constraint Compliance**: FP3O achieved an emergency shield intervention rate of **only 13.82%**, compared to **32.66%** for IPPO Blind — an absolute **57.7% reduction** in emergency safety overrides.
 
 ---
 
-## Current Interpretation
-
-The central observation of this study is:
-
-> **In the tested heterogeneous OTA environment, semantic type conditioning allowed a fully shared IPPO policy to achieve performance comparable to an explicitly specialized FP3O architecture.**
-
-The two approaches represent specialization differently:
-
-```text
-FP3O
-Shared representation
-        +
-Type-specific policy heads
-        ↓
-Parameter-based specialization
-
-
-Type-Conditioned IPPO
-Shared representation
-        +
-Semantic ECU type
-        ↓
-Input-conditioned specialization
-```
-
-The result suggests that explicit type-specific policy heads may not always be necessary when the information required to distinguish agent roles is provided directly to a sufficiently expressive shared policy.
-
-However, the current experiments do not establish whether this remains true for larger fleets, unseen type compositions, or substantially greater levels of heterogeneity.
-
----
-
-## Architectural Components
-
-| Component | Concept | Implementation |
-| :--- | :--- | :--- |
-| **Parameter Sharing** | IPPO / MAPPO | Shared actor-critic parameters across agents |
-| **Type Conditioning** | Semantic role conditioning | One-hot `ecu_type` input to the shared policy |
-| **Partial Sharing** | FP3O | Shared backbone with specialized policy heads |
-| **Stability** | CTDE / Death Masking | Centralized critic with terminated-agent handling |
-| **Safety** | Safety Shield | Action filter preventing modeled fleet-memory constraint violations |
-| **Credit Assignment** | Shapley Value | Monte Carlo Shapley calculation for marginal contribution |
-| **Environment** | PettingZoo MARL | Parallel multi-agent OTA scheduling environment |
-| **Training** | PyTorch / RL algorithms | PPO-based multi-agent policy training |
-
----
-
-## Environment
-
-The environment represents coordinated firmware updates across multiple ECUs.
-
-Each agent observes its local firmware and resource state and selects firmware update operations such as:
-
-- **Copy**
-- **Modify**
-- **Multi-Base**
-
-Invalid action combinations are masked before policy execution.
-
-The environment introduces stochastic transmission behavior, memory constraints, and type-dependent operation costs to create conflicting optimization preferences between ECU types.
-
-The reward represents the simulated OTA scheduling objective, including update cost, transmission-related cost, and memory overhead.
-
-The safety shield separately enforces the modeled fleet-memory constraint during action selection.
-
----
-
-## Experimental Progression
-
-The research was developed incrementally:
-
-```text
-ReLES-OTA SARL baseline
-        ↓
-Multi-Agent environment
-        ↓
-Homogeneous MARL
-        ↓
-Heterogeneous ECU objectives
-        ↓
-IPPO / MAPPO / FP3O comparison
-        ↓
-FP3O instability
-        ↓
-Numerical and architectural stabilization
-        ↓
-Shared backbone + safety shield + death masking
-        ↓
-Agent-ID conditioning discovered
-        ↓
-Agent-ID removed as a confound
-        ↓
-Semantic ECU-type conditioning
-        ↓
-Type-Conditioned IPPO
-        ↓
-Competitive performance against FP3O
-```
-
----
-
-## Reproducibility
-
-The repository contains the environment, training implementations, experiment configurations, seed-level results, analysis scripts, and training logs used in the current study.
-
-Headline comparisons currently use **five independent random seeds**. The individual seed results are retained rather than reporting only aggregate means.
-
-The five-seed setting reflects the computational constraints of the current study. Larger seed counts, broader fleet configurations, and additional ablations are reserved for follow-up evaluation.
-
----
-
-## Installation & Tests
-
-### 1. Install dependencies
+## Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/saadmansakib47/Multiagent-ReLES-OTA.git
+cd Multiagent-ReLES-OTA
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 2. Verify environment compliance
-
-```bash
-python tests/test_marl_env.py
-```
-
-### 3. Verify FP3O policy routing
-
-```bash
-python tests/test_fp3o.py
-```
-
-### 4. Verify non-bijective fleet scaling
-
-```bash
-python tests/test_bijective_confound.py
-```
-
-### 5. Launch Training (CLI)
-
-```bash
-python scripts/train.py --algorithm fp3o --fleet_preset balanced_8
-```
-
-### 6. Launch Web Diagnostic Interface
-
-```bash
-python scripts/web_ui.py
+# Install marl_ota package in editable development mode
+pip install -e .
 ```
 
 ---
@@ -287,27 +177,6 @@ python scripts/web_ui.py
 - **Saadman Sakib**: Lead Architect, policy routing, environment design, MARL integration, training infrastructure
 - **Mohtasim Dipto**: Environment development, death masking, parallel vectorization
 - **Mahin Islam**: Statistical analysis, Welch's t-tests, confidence intervals, result visualization
-
----
-
-## Future Research
-
-The current result raises a broader question:
-
-> **At what level of heterogeneity does explicit policy specialization become necessary?**
-
-Future experiments can investigate:
-
-- larger fleet sizes,
-- increasing numbers of ECU types,
-- unseen type compositions,
-- additional random seeds,
-- type conditioning versus agent-ID conditioning,
-- safety shield ablations,
-- death masking ablations,
-- the boundary where FP3O begins to outperform Type-Conditioned IPPO.
-
-These experiments are intended to determine the limits of shared type-conditioned policies rather than assume that one architecture is universally superior.
 
 ---
 

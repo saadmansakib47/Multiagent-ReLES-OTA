@@ -449,7 +449,7 @@ class MultiAgentOTAEnv(ParallelEnv):
             encoding_cost = delta_size * (1.25 if operation == 2 else 1.0)
             tx_cost = calculate_tx_cost(delta_size, self.net_params, stochastic=self.stochastic_latency)
             if self.constrained_network_mode:
-                tx_cost *= self.net_params.get("monsoon_multiplier", 1.0)
+                tx_cost *= self.net_params.get("burst_jitter_multiplier", self.net_params.get("monsoon_multiplier", 1.0))
             overhead = delta_size * (2.6 if operation == 2 else 1.9)
             
             valid_actions[agent] = (block_idx, operation, delta_size, overhead, encoding_cost, tx_cost)
