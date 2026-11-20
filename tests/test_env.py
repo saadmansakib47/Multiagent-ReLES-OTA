@@ -1,3 +1,8 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from ota_env import OTAEnv
 
 env = OTAEnv(n_blocks=16, constrained_network_mode=False)

@@ -253,13 +253,19 @@ pip install -r requirements.txt
 ### 2. Verify environment compliance
 
 ```bash
-python test_marl_env.py
+python tests/test_marl_env.py
 ```
 
 ### 3. Verify FP3O policy routing
 
 ```bash
-python test_fp3o.py
+python tests/test_fp3o.py
+```
+
+### 4. Verify non-bijective fleet scaling
+
+```bash
+python tests/test_bijective_confound.py
 ```
 
 ---

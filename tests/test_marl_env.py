@@ -17,7 +17,11 @@ Run with:
 
 import numpy as np
 import time
+import os
 import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from collections import defaultdict
 
 if hasattr(sys.stdout, 'reconfigure'):
