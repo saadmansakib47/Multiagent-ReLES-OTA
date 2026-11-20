@@ -144,6 +144,9 @@ def train_algorithm(
     seed: int               = 42,
     save_path: Optional[str] = None,
     return_model: bool      = False,
+    checkpoint_freq: int    = 10_000,
+    checkpoint_dir: Optional[str] = None,
+    resume_from_checkpoint: Optional[str] = None,
 ) -> None:
     """
     Train Independent PPO (IPPO) on the multi-agent OTA env.
@@ -212,7 +215,76 @@ def train_algorithm(
             self._total_steps   = 0
 
 
-    print(f"\n Training {algorithm.upper()} on MultiAgentOTAEnv")
+    # -- Tier-2: Periodic Intra-Seed Step Checkpoint -----------------------
+    class StepCheckpointCallback(BaseCallback):
+        """
+        Saves model weights every `save_freq` env steps.
+        File: <checkpoint_dir>/seed_{seed_id}_step_{n}.zip
+        VecNormalize stats saved alongside as <stem>_vecnorm.pkl.
+        Runner auto-detects latest checkpoint and passes it as
+        resume_from_checkpoint so training resumes without data loss.
+        """
+        def __init__(self, save_freq: int, ckpt_dir, seed_id: int):
+            super().__init__(verbose=0)
+            self._save_freq = save_freq
+            self._ckpt_dir  = Path(ckpt_dir)
+            self._ckpt_dir.mkdir(parents=True, exist_ok=True)
+            self._seed_id   = seed_id
+            self._last_save = 0
+
+        def _on_step(self) -> bool:
+            n = self.model.num_timesteps
+            if n - self._last_save >= self._save_freq:
+                stem = self._ckpt_dir / f"seed_{self._seed_id}_step_{n}"
+                self.model.save(str(stem))
+                if hasattr(self.training_env, "save"):
+                    self.training_env.save(str(stem) + "_vecnorm.pkl")
+                print(f"  [ckpt] Checkpoint at step {n:,} -> {stem}.zip")
+                self._last_save = n
+            return True
+
+    # -- Tier-3: Graceful Pause via SIGINT (Ctrl+C) -------------------------
+    class GracefulPauseCallback(BaseCallback):
+        """
+        Catches SIGINT (Ctrl+C) and pauses training cleanly:
+          1. Sets a threading.Event -> _on_step() returns False.
+          2. SB3 exits model.learn() after the current step.
+          3. train_algorithm() saves an emergency checkpoint using the
+             same seed_{s}_step_{n}.zip naming as Tier-2 so the next
+             run auto-resumes via Tier-2 detection.
+        Works on Windows (Ctrl+C raises SIGINT in Python main thread).
+        NOTE: Do NOT remove — last line of defence against manual interrupts.
+        """
+        def __init__(self, ckpt_dir, seed_id: int):
+            super().__init__(verbose=0)
+            import threading, signal
+            self._stop_event = threading.Event()
+            self._ckpt_dir   = Path(ckpt_dir)
+            self._ckpt_dir.mkdir(parents=True, exist_ok=True)
+            self._seed_id    = seed_id
+            self._paused     = False
+
+            def _handle_sigint(signum, frame):
+                if not self._stop_event.is_set():
+                    print("\n  [tier3] Ctrl+C caught -- finishing current step then saving checkpoint...")
+                    self._stop_event.set()
+
+            try:
+                signal.signal(signal.SIGINT, _handle_sigint)
+            except (OSError, ValueError):
+                pass  # Only works on main thread; ignore if in subprocess
+
+        def _on_step(self) -> bool:
+            if self._stop_event.is_set():
+                self._paused = True
+                return False  # Signals SB3 to exit learn() cleanly
+            return True
+
+        @property
+        def was_paused(self) -> bool:
+            return self._paused
+
+        print(f"\n Training {algorithm.upper()} on MultiAgentOTAEnv")
     print(f"   n_agents={n_agents}, n_blocks={n_blocks}, constrained_network_mode={constrained_network_mode}, safety={safety}")
     print(f"   total_timesteps={total_timesteps:,}, n_envs={n_envs}, n_steps={n_steps}, batch_size={batch_size}")
 
@@ -319,12 +391,60 @@ def train_algorithm(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+    # -- Tier-2 resume ---------------------------------------------------
+    _steps_done = 0
+    if resume_from_checkpoint and Path(resume_from_checkpoint).exists():
+        print(f"  [tier2] Resuming from: {resume_from_checkpoint}")
+        model = PPO.load(resume_from_checkpoint, env=env, device=selected_device)
+        vecnorm_pkl = str(Path(resume_from_checkpoint).with_suffix("")) + "_vecnorm.pkl"
+        if Path(vecnorm_pkl).exists():
+            from stable_baselines3.common.vec_env import VecNormalize as _VN
+            _w = env
+            while hasattr(_w, "venv"):
+                if isinstance(_w, _VN):
+                    _w.load_running_average(vecnorm_pkl)
+                    print(f"  [tier2] VecNormalize stats restored from {vecnorm_pkl}")
+                    break
+                _w = _w.venv
+        _steps_done = model.num_timesteps
+        print(f"  [tier2] Resuming at step {_steps_done:,} ({total_timesteps-_steps_done:,} remaining)")
+    _remaining = max(0, total_timesteps - _steps_done)
+
     print(f"\n  Starting {algorithm.upper()} training on {selected_device}...")
     t0 = time.time()
+    _ckpt_dir_resolved = checkpoint_dir or f"{save_dir}/checkpoints"
+    _pause_cb = GracefulPauseCallback(
+        ckpt_dir=_ckpt_dir_resolved,
+        seed_id=seed,
+    )
     callback = CallbackList([
         InvalidActionRateCallback(),
+        StepCheckpointCallback(
+            save_freq=checkpoint_freq,
+            ckpt_dir=_ckpt_dir_resolved,
+            seed_id=seed,
+        ),
+        _pause_cb,
     ])
-    model.learn(total_timesteps=total_timesteps, progress_bar=True, callback=callback)
+    model.learn(
+        total_timesteps=_remaining,
+        progress_bar=True,
+        callback=callback,
+        reset_num_timesteps=(_steps_done == 0),
+    )
+
+    # -- Tier-3: Emergency checkpoint if user paused with Ctrl+C ----------
+    if _pause_cb.was_paused:
+        n = model.num_timesteps
+        stem = Path(_ckpt_dir_resolved) / f"seed_{seed}_step_{n}"
+        model.save(str(stem))
+        if hasattr(env, "save"):  # VecNormalize
+            env.save(str(stem) + "_vecnorm.pkl")
+        print(f"  [tier3] Emergency checkpoint -> {stem}.zip (step {n:,})")
+        print( "  [tier3] Re-run benchmark_runner.py to resume -- Tier 2 will pick this up automatically.")
+        env.close()
+        # Raise so benchmark_runner keeps Tier-1 status as "started" (not completed)
+        raise KeyboardInterrupt("Training paused -- resume with benchmark_runner.py")
     elapsed = time.time() - t0
 
     tag = "bd" if constrained_network_mode else "generic"
